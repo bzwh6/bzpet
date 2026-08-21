@@ -1,0 +1,23 @@
+server:
+  port: 8082
+
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/pet_pet?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 10
+
+bz:
+  swagger:
+    enable: true
+    enableResponseWrap: true
+    package-path: com.bzpet.petpet.controller
+    title: 不知宠物 - 宠物微服务接口文档
+    description: 该服务用于管理宠物相关信息
+    contact-name: 不知宠物
+    contact-url: http://www.bzpet.cn/
+    contact-email: bzwh@bzpet.cn
+    version: v1.0

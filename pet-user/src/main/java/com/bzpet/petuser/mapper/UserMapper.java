@@ -2,6 +2,7 @@ package com.bzpet.petuser.mapper;
 
 import com.bzpet.petuser.domain.po.User;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import org.apache.ibatis.annotations.Mapper;
 
 /**
  * <p>
@@ -11,6 +12,7 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
  * @author bzwh
  * @since 2026-08-20
  */
+@Mapper
 public interface UserMapper extends BaseMapper<User> {
 
 }

@@ -18,6 +18,7 @@
     <modules>
         <module>pet-common</module>
         <module>pet-user</module>
+        <module>pet-pet</module>
     </modules>
 
     <properties>
@@ -28,8 +29,8 @@
             <!-- MyBatis-Plus 启动器 -->
             <dependency>
                 <groupId>com.baomidou</groupId>
-                <artifactId>mybatis-plus-boot-starter</artifactId>
-                <version>3.5.5</version>
+                <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+                <version>3.5.12</version>
             </dependency>
             <!-- MySQL 驱动 -->
             <dependency>
@@ -62,8 +63,20 @@
             <!--knife4j-->
             <dependency>
                 <groupId>com.github.xiaoymin</groupId>
-                <artifactId>knife4j-spring-boot-starter</artifactId>
-                <version>3.0.3</version>
+                <artifactId>knife4j-openapi3-jakarta-spring-boot-starter</artifactId>
+                <version>4.4.0</version>
+            </dependency>
+            <!-- Hutool 工具类库 -->
+            <dependency>
+                <groupId>cn.hutool</groupId>
+                <artifactId>hutool-all</artifactId>
+                <version>5.8.29</version>
+            </dependency>
+            <!-- Validation -->
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-validation</artifactId>
+                <version>3.3.7</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
