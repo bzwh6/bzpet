@@ -1,3 +1,4 @@
 com.bzpet.common.autoConfig.swagger.Knife4jConfiguration
 com.bzpet.common.autoConfig.handler.GlobalExceptionHandler
 com.bzpet.common.autoConfig.handler.MyMetaObjectHandler
+com.bzpet.common.autoConfig.interceptor.WebMvcConfiguration

@@ -56,6 +56,12 @@
             <version>0.0.1-SNAPSHOT</version>
             <scope>compile</scope>
         </dependency>
+        <!--jjwt-->
+        <dependency>
+            <groupId>com.bzpet</groupId>
+            <artifactId>pet-jwt</artifactId>
+            <version>0.0.1-SNAPSHOT</version>
+        </dependency>
         <!-- 参数校验 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

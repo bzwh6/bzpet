@@ -5,6 +5,9 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import java.time.LocalDateTime;
 import java.io.Serializable;
+
+import com.bzpet.petpet.enums.AdoptionStatus;
+import com.bzpet.petpet.enums.PetGender;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -41,7 +44,7 @@ public class Pet implements Serializable {
     private Integer age;
 
     @Schema(description="性别 0公 1母")
-    private Boolean gender;
+    private PetGender gender;
 
     @Schema(description="性格描述")
     private String description;
@@ -53,7 +56,7 @@ public class Pet implements Serializable {
     private Long publisherId;
 
     @Schema(description="状态 0待领养 1已领养 2下架")
-    private Boolean status;
+    private AdoptionStatus status;
 
     @Schema(description="创建时间")
     private LocalDateTime createTime;
