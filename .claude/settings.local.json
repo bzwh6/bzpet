@@ -3,7 +3,37 @@
     "allow": [
       "Bash(mvn -v)",
       "Bash(mvn validate *)",
-      "Bash(echo \"EXIT: $?\")"
+      "Bash(echo \"EXIT: $?\")",
+      "WebSearch",
+      "Bash(cat pet-common/target/classes/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports)",
+      "Bash(find pet-common/target -name \"MybatisPlusConfig*\")",
+      "Bash(find pet-common/target -path \"*autoConfig*\" -name \"*.class\")",
+      "Bash(xargs ls *)",
+      "Bash(mvn -pl pet-pet dependency:tree -Dincludes=com.baomidou,net.sf.jsqlparser,com.github.jsqlparser)",
+      "Bash(timeout 60 mvn -pl pet-pet spring-boot:run -Dspring-boot.run.jvmArguments=\"-Dlogging.level.org.springframework.boot.autoconfigure=DEBUG\")",
+      "Bash(xxd ~/.m2/repository/com/bzpet/pet-common/0.0.1-SNAPSHOT/pet-common-0.0.1-SNAPSHOT.jar)",
+      "Read(//c/Users/admin/.m2/repository/com/bzpet/pet-common/0.0.1-SNAPSHOT/**)",
+      "Bash(mvn -pl pet-common -am clean package -DskipTests)",
+      "Bash(unzip -l pet-common/target/pet-common-0.0.1-SNAPSHOT.jar)",
+      "Bash(timeout 90 mvn -pl pet-pet spring-boot:run -Dspring-boot.run.jvmArguments=\"-Dlogging.level.org.springframework.boot.autoconfigure=DEBUG\")",
+      "Bash(timeout 90 mvn -pl pet-pet spring-boot:run)",
+      "Bash(netstat -ano)",
+      "Bash(wmic process *)",
+      "Bash(grep -oE \"pet-common[^;]*|D:\\\\\\\\\\\\\\\\develop[^;]*pet-common[^;]*|pet-common-0.0.1-SNAPSHOT.jar\")",
+      "Bash(timeout 75 mvn -pl pet-pet spring-boot:run -Dspring-boot.run.arguments=\"--server.port=8090\" -Dspring-boot.run.jvmArguments=\"-Dlogging.level.org.springframework.boot.autoconfigure=DEBUG\")",
+      "Bash(curl -s \"http://localhost:8090/pets/list?pageNo=1&pageSize=2\")",
+      "Read(//d/develop/apache-maven-3.9.14-bin/apache-maven-3.9.14/com/baomidou/**)",
+      "Read(//d/develop/apache-maven-3.9.14-bin/apache-maven-3.9.14/com/baomidou/mybatis-plus-jsqlparser/**)",
+      "Read(//d/develop/apache-maven-3.9.14-bin/apache-maven-3.9.14/com/github/jsqlparser/jsqlparser/**)",
+      "Bash(javap -v -p pet-common/target/classes/com/bzpet/common/autoConfig/mp/MybatisPlusConfig.class)",
+      "Bash(curl -s \"http://localhost:8082/pets/list?pageNo=1&pageSize=2\")",
+      "Bash(curl -s \"http://localhost:8082/pets/list\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('total=',d['data']['total'],'pages=',d['data']['pages'],'list条数=',len\\(d['data']['list']\\)\\)\")",
+      "Bash(curl -s \"http://localhost:8082/pets/list?pageNo=1&pageSize=5&age=0&gender=0&adoptionStatus=0\")",
+      "Bash(curl -s \"http://localhost:8082/pets/list?pageNo=1&pageSize=5\")",
+      "Bash(curl -s \"http://localhost:8082/pets/list?pageNo=1&pageSize=5&age=0\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('total=',d['data']['total']\\)\")",
+      "Bash(curl -s \"http://localhost:8082/pets/list?pageNo=1&pageSize=5&gender=0\")"
     ]
   }
 }

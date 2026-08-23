@@ -20,6 +20,7 @@
         <module>pet-user</module>
         <module>pet-pet</module>
         <module>pet-getway</module>
+        <module>pet-jwt</module>
     </modules>
 
     <properties>
@@ -31,6 +32,12 @@
             <dependency>
                 <groupId>com.baomidou</groupId>
                 <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+                <version>3.5.12</version>
+            </dependency>
+            <!-- MyBatis-Plus 3.5.9 版本需要引入这个包才能使用分页插件 -->
+            <dependency>
+                <groupId>com.baomidou</groupId>
+                <artifactId>mybatis-plus-jsqlparser</artifactId>
                 <version>3.5.12</version>
             </dependency>
             <!-- MySQL 驱动 -->
@@ -83,12 +90,14 @@
     </dependencyManagement>
 
     <build>
-        <plugins>
-            <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
-            </plugin>
-        </plugins>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-maven-plugin</artifactId>
+                </plugin>
+            </plugins>
+        </pluginManagement>
     </build>
 
 </project>

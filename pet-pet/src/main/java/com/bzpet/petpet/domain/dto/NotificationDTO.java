@@ -1,0 +1,52 @@
+package com.bzpet.petpet.domain.dto;
+
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
+import com.bzpet.common.enums.NotificationType;
+import com.bzpet.common.enums.ReadStatus;
+import io.swagger.v3.oas.annotations.media.Schema;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.experimental.Accessors;
+
+import java.io.Serializable;
+import java.time.LocalDateTime;
+
+/**
+ * <p>
+ * 站内通知表
+ * </p>
+ *
+ * @author bzwh
+ * @since 2026-08-23
+ */
+@Data
+public class NotificationDTO  {
+
+    @Schema(description="发布人ID（接收者）")
+    private Long publisherId;
+
+    @Schema(description="申请人ID（触发者）")
+    private Long applicantId;
+
+    @Schema(description="宠物ID（方便点击跳转详情）")
+    private Long petId;
+
+    @Schema(description="标题（即申请人的申请内容）")
+    private String title;
+
+    @Schema(description="通知内容（固定的业务模板）")
+    private String content;
+
+    @Schema(description="通知类型：0领养申请 1审核通过 2系统通知")
+    private NotificationType type;
+
+    @Schema(description="已读状态：0未读 1已读")
+    private ReadStatus isRead;
+
+    @Schema(description="创建时间")
+    private LocalDateTime createTime;
+
+
+}

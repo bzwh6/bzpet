@@ -39,6 +39,11 @@
             <groupId>com.baomidou</groupId>
             <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
         </dependency>
+        <!-- 引入 Mybatis-Plus SQL 分页插件 -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-jsqlparser</artifactId>
+        </dependency>
         <!-- 引入 Nacos 服务 -->
         <dependency>
             <groupId>com.alibaba.cloud</groupId>

@@ -14,6 +14,15 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
       maximum-pool-size: 10
+  rabbitmq:
+    host: 192.168.150.101
+    port: 5672
+    username: bzpet
+    password: bzpet
+    virtual-host: /bz
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
 
 bz:
   swagger:
