@@ -4,6 +4,7 @@ package com.bzpet.petpet.controller;
 import com.bzpet.common.domain.R;
 import com.bzpet.common.domain.dto.PageDTO;
 import com.bzpet.petpet.domain.dto.AdoptionApplyDTO;
+import com.bzpet.petpet.domain.dto.ProcessApplicationDTO;
 import com.bzpet.petpet.domain.po.AdoptionApplication;
 import com.bzpet.petpet.domain.query.AdoptionApplyQueryDTO;
 import com.bzpet.petpet.domain.vo.AdoptionApplyVO;
@@ -40,5 +41,10 @@ public class AdoptionApplicationController {
     @Operation(summary = "分页查询我的领养申请列表")
     public R<PageDTO<AdoptionApplyVO>> myAdoptionList(@ParameterObject AdoptionApplyQueryDTO pageDTO) {
         return applicationService.myAdoptionList(pageDTO);
+    }
+    @PostMapping("/process")
+    @Operation(summary = "处理领养申请")
+    public R<String> processApplication(@Valid @RequestBody ProcessApplicationDTO processDTO) {
+        return applicationService.processApplication(processDTO);
     }
 }

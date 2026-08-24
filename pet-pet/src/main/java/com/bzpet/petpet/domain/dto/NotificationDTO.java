@@ -12,6 +12,7 @@ import lombok.experimental.Accessors;
 
 import java.io.Serializable;
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * <p>
@@ -24,11 +25,14 @@ import java.time.LocalDateTime;
 @Data
 public class NotificationDTO  {
 
-    @Schema(description="发布人ID（接收者）")
-    private Long publisherId;
+    @Schema(description="接收者ID列表，用于发送通知给多个用户")
+    private List<Long> receiverIds;
 
-    @Schema(description="申请人ID（触发者）")
-    private Long applicantId;
+    @Schema(description="发送方ID")
+    private Long senderId;
+
+    @Schema(description="领养申请ID列表（用于审核通过通知）")
+    private List<Long> applicationIds;
 
     @Schema(description="宠物ID（方便点击跳转详情）")
     private Long petId;

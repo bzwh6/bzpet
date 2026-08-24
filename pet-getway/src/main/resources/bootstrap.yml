@@ -1,0 +1,23 @@
+server:
+  port: 8083
+spring:
+  profiles:
+    active: dev
+  application:
+    name: getway-service
+  cloud:
+    nacos:
+      config:
+        file-extension: yaml
+        shared-configs: # 共享配置
+          - data-id: shared-redis.yaml # 共享redis配置
+            refresh: true
+          - data-id: shared-mybatis.yaml # 共享mybatis配置
+            refresh: true
+          - data-id: shared-rabbitmq.yaml # 共享mq配置
+            refresh: true
+          - data-id: shared-mysql.yaml # 共享mysql配置
+            refresh: true
+bz:
+  db:
+    database: pet_getway

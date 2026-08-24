@@ -24,4 +24,24 @@ public class NotificationListener {
         //添加通知到数据库
         notificationService.addNotification(dto);
     }
+
+    @RabbitListener(bindings = @QueueBinding(
+            value = @Queue(name = "notification.accept.adption.queue",durable = "true"),
+            exchange = @Exchange(name = MqConstants.Exchange.PET_ADPTION_EXCHANGE,type = "topic"),
+            key = MqConstants.Key.PET_ADPTION_ACCEPT_ROUTING_KEY
+    ))
+    public void acceptAdoptionApplication(NotificationDTO dto){
+        //通过领养申请，更新领养申请状态为已通过
+        notificationService.acceptAdoptionApplication(dto);
+    }
+
+    @RabbitListener(bindings = @QueueBinding(
+            value = @Queue(name = "notification.reject.adption.queue",durable = "true"),
+            exchange = @Exchange(name = MqConstants.Exchange.PET_ADPTION_EXCHANGE,type = "topic"),
+            key = MqConstants.Key.PET_ADPTION_REJECT_ROUTING_KEY
+    ))
+    public void rejectAdoptionApplication(NotificationDTO dto){
+        //拒绝领养申请，更新领养申请状态为已拒绝
+        notificationService.rejectAdoptionApplication(dto);
+    }
 }

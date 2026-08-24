@@ -11,6 +11,7 @@ import com.bzpet.common.exception.BadException;
 import com.bzpet.common.utils.UserContext;
 import com.bzpet.petpet.domain.dto.AdoptionApplyDTO;
 import com.bzpet.petpet.domain.dto.NotificationDTO;
+import com.bzpet.petpet.domain.dto.ProcessApplicationDTO;
 import com.bzpet.petpet.domain.po.AdoptionApplication;
 import com.bzpet.petpet.domain.po.Pet;
 import com.bzpet.petpet.domain.query.AdoptionApplyQueryDTO;
@@ -24,9 +25,13 @@ import com.bzpet.petpet.service.IPetService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -68,12 +73,16 @@ public class AdoptionApplicationServiceImpl extends ServiceImpl<AdoptionApplicat
         adoptionApplication.setPublisherId(pet.getPublisherId());
         adoptionApplication.setStatus(ApplicaltionStatus.PENDING);
         adoptionApplication.setPetId(applyDTO.getPetId());
-        //保存领养申请
-        save(adoptionApplication);
+        try {
+            //保存领养申请
+            save(adoptionApplication);
+        } catch (Exception e) {
+            throw new BadException("不可重复提交申请！");
+        }
         //向发布人发送通知
         NotificationDTO notificationDTO = new NotificationDTO();
-        notificationDTO.setPublisherId(pet.getPublisherId());
-        notificationDTO.setApplicantId(userId);
+        notificationDTO.setReceiverIds(Collections.singletonList(pet.getPublisherId()));
+        notificationDTO.setSenderId(userId);
         notificationDTO.setPetId(applyDTO.getPetId());
         notificationDTO.setTitle(applyDTO.getReason());
         notificationDTO.setContent("您有新的领养申请");
@@ -111,5 +120,88 @@ public class AdoptionApplicationServiceImpl extends ServiceImpl<AdoptionApplicat
         }
         pageDTO.setList(voList);
         return R.ok(pageDTO);
+    }
+
+    @Override
+    @Transactional
+    public R<String> processApplication(ProcessApplicationDTO processDTO) {
+        //查询领养申请
+        Long applicationId = processDTO.getApplicationId();
+        AdoptionApplication application = getById(applicationId);
+        //判断是否存在
+        if (application == null) {
+            throw new BadException("领养申请不存在");
+        }
+        //查询宠物表
+        Long petId = application.getPetId();
+        Pet pet = petService.getById(petId);
+        if (pet == null) {
+            throw new BadException("申请领养的宠物不存在");
+        }
+        //判断宠物状态是否为待领养
+        if (pet.getStatus() != AdoptionStatus.AVAILABLE) {
+            throw new BadException("宠物状态不是待领养");
+        }
+        //判断当前用户是否有权限处理
+        Long userId = UserContext.getUserId();
+        if (!userId.equals(application.getPublisherId())) {
+            throw new BadException("您没有权限处理该领养申请");
+        }
+        //判断领养申请状态是否为待审核
+        if (application.getStatus() != ApplicaltionStatus.PENDING) {
+            throw new BadException("领养申请状态不是待审核");
+        }
+        //判断领养申请状态是否为已同意或已拒绝
+        if (processDTO.getStatus() != ApplicaltionStatus.APPROVED && processDTO.getStatus() != ApplicaltionStatus.REJECTED) {
+            throw new BadException("领养申请状态错误");
+        }
+        //更新领养申请状态
+        boolean isAccept = processDTO.getStatus() == ApplicaltionStatus.APPROVED;
+        application.setStatus(isAccept ?
+                ApplicaltionStatus.APPROVED : ApplicaltionStatus.REJECTED);
+        application.setAuditTime(LocalDateTime.now());
+        updateById(application);
+        //更新宠物状态
+        pet.setStatus(isAccept ?
+                AdoptionStatus.ADOPTED : AdoptionStatus.AVAILABLE);
+        petService.updateById(pet);
+        //利用同步回调，在事务提交后利用mq通知
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                //发送mq通知
+                if (isAccept) {
+                    handleAccept(application.getApplicantId(), petId);
+                } else {
+                    handleReject(application.getApplicantId(), petId);
+                }
+            }
+        });
+        return R.ok("处理成功");
+    }
+    private void handleAccept(Long applicanterId, Long petId) {
+        NotificationDTO notificationDTO = new NotificationDTO();
+        notificationDTO.setPetId(petId);
+        notificationDTO.setReceiverIds(Collections.singletonList(applicanterId));
+        rabbitTemplate.convertAndSend(
+                MqConstants.Exchange.PET_ADPTION_EXCHANGE,
+                MqConstants.Key.PET_ADPTION_ACCEPT_ROUTING_KEY,
+                notificationDTO
+        );
+        rabbitTemplate.convertAndSend(
+                MqConstants.Exchange.PET_ADPTION_EXCHANGE,
+                MqConstants.Key.PET_ADPTION_REJECT_ROUTING_KEY,
+                notificationDTO
+        );
+    }
+    private void handleReject(Long applicanterId, Long petId) {
+        NotificationDTO notificationDTO = new NotificationDTO();
+        notificationDTO.setPetId(petId);
+        notificationDTO.setReceiverIds(Collections.singletonList(applicanterId));
+        rabbitTemplate.convertAndSend(
+                MqConstants.Exchange.PET_ADPTION_EXCHANGE,
+                MqConstants.Key.PET_ADPTION_REJECT_ROUTING_KEY,
+                notificationDTO
+        );
     }
 }

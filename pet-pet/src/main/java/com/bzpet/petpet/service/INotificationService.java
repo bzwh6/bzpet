@@ -15,4 +15,8 @@ import com.baomidou.mybatisplus.extension.service.IService;
 public interface INotificationService extends IService<Notification> {
 
     void addNotification(NotificationDTO dto);
+
+    void rejectAdoptionApplication(NotificationDTO dto);
+
+    void acceptAdoptionApplication(NotificationDTO dto);
 }

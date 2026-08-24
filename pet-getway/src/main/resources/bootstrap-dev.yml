@@ -1,0 +1,16 @@
+spring:
+  cloud:
+    nacos:
+      server-addr: 192.168.150.101:8848 # nacos注册中心
+      discovery:
+        group: DEFAULT_GROUP
+    gateway:
+      routes:
+        - id: pet-user
+          uri: lb://user-service # lb代表负载均衡，去Nacos里找这个服务
+          predicates:
+            - Path=/user/** # 所有以 /user 开头的请求，都转发给用户服务
+        - id: pet-service
+          uri: lb://pet-service # 去Nacos里找宠物服务
+          predicates:
+            - Path=/pets/** # 所有以 /pet 开头的请求，都转发给宠物服务

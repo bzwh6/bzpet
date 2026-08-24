@@ -1,0 +1,33 @@
+server:
+  port: 8081
+spring:
+  profiles:
+    active: dev
+  application:
+    name: user-service
+  cloud:
+    nacos:
+      config:
+        file-extension: yaml
+        shared-configs: # 共享配置
+          - data-id: shared-redis.yaml # 共享redis配置
+            refresh: true
+          - data-id: shared-mybatis.yaml # 共享mybatis配置
+            refresh: true
+          - data-id: shared-rabbitmq.yaml # 共享mq配置
+            refresh: true
+          - data-id: shared-mysql.yaml # 共享mysql配置
+            refresh: true
+bz:
+  swagger:
+    enable: true
+    enableResponseWrap: true
+    package-path: com.bzpet.petuser.controller
+    title: 不知宠物 - 用户微服务接口文档
+    description: 该服务用于管理用户相关信息
+    contact-name: 不知宠物
+    contact-url: http://www.bzpet.cn/
+    contact-email: bzwh@bzpet.cn
+    version: v1.0
+  db:
+    database: pet_user

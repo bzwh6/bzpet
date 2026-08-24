@@ -9,5 +9,9 @@ public interface MqConstants {
     interface Key {
         //宠物领养相关路由键
         String PET_ADPTION_ROUTING_KEY = "pet_adoption_routing_key";
+        //同意领养路由键
+        String PET_ADPTION_ACCEPT_ROUTING_KEY = "pet_adoption_accept_routing_key";
+        //拒绝领养路由键
+        String PET_ADPTION_REJECT_ROUTING_KEY = "pet_adoption_reject_routing_key";
     }
 }
