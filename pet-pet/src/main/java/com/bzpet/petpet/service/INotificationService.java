@@ -1,6 +1,7 @@
 package com.bzpet.petpet.service;
 
 import com.bzpet.petpet.domain.dto.NotificationDTO;
+import com.bzpet.petpet.domain.dto.ProcessDTO;
 import com.bzpet.petpet.domain.po.Notification;
 import com.baomidou.mybatisplus.extension.service.IService;
 
@@ -16,7 +17,7 @@ public interface INotificationService extends IService<Notification> {
 
     void addNotification(NotificationDTO dto);
 
-    void rejectAdoptionApplication(NotificationDTO dto);
+    void rejectAdoptionApplication(ProcessDTO dto);
 
-    void acceptAdoptionApplication(NotificationDTO dto);
+    void acceptAdoptionApplication(ProcessDTO dto);
 }

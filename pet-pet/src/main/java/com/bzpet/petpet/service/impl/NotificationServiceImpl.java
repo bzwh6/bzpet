@@ -1,12 +1,12 @@
 package com.bzpet.petpet.service.impl;
 
 
-
 import cn.hutool.core.bean.BeanUtil;
 import com.bzpet.common.enums.NotificationType;
 import com.bzpet.common.enums.ReadStatus;
 import com.bzpet.common.utils.UserContext;
 import com.bzpet.petpet.domain.dto.NotificationDTO;
+import com.bzpet.petpet.domain.dto.ProcessDTO;
 import com.bzpet.petpet.domain.po.AdoptionApplication;
 import com.bzpet.petpet.domain.po.Notification;
 import com.bzpet.petpet.domain.po.Pet;
@@ -39,6 +39,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Notification> implements INotificationService {
     private final IAdoptionApplicationService applicationService;
+
     @Override
     public void addNotification(NotificationDTO dto) {
         //把数据保存到数据库
@@ -48,66 +49,58 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
 
     @Override
     @Transactional
-    public void rejectAdoptionApplication(NotificationDTO dto) {
-        //获取当前用户信息,是发送方ID
-        Long userId = UserContext.getUserId();
-        //通过领养申请人id，宠物id，更新领养申请状态为已拒绝
-        int size = dto.getReceiverIds().size();
-        if (size == 0)return;
-        else if (size == 1) {
-            //只需要拒绝一个领养申请，其他领养申请状态保持不变
+    public void rejectAdoptionApplication(ProcessDTO dto) {
+        //判断申请人id是否只有一个
+        if (!dto.getIsAccept()) {
+            //说明发布者明确拒绝了一个申请
+            //向申请人发送通知，通知被拒绝
+            NotificationDTO notificationDTO = new NotificationDTO();
+            notificationDTO.setType(NotificationType.NOTIFICATION_TYPE_SYSTEM);
+            notificationDTO.setIsRead(ReadStatus.UNREAD);
+            notificationDTO.setPetId(dto.getPetId());
+            notificationDTO.setApplicantId(dto.getApplicantId().get(0));
+            notificationDTO.setPublisherId(dto.getPublisherId());
+            notificationDTO.setTitle(dto.getRejectReason());
+            notificationDTO.setContent("很遗憾，您的领养申请已被拒绝！");
+            addNotification(notificationDTO);
+        } else {
+            //说明发布者同意了一个申请，其他的申请被拒绝.
+            //修改领养申请状态为已拒绝
             applicationService.lambdaUpdate()
-                    .eq(AdoptionApplication::getApplicantId, dto.getReceiverIds().get(0))
+                    .in(AdoptionApplication::getApplicantId, dto.getApplicantId())
+                    .eq(AdoptionApplication::getPublisherId, dto.getPublisherId())
                     .eq(AdoptionApplication::getPetId, dto.getPetId())
-                    .eq(AdoptionApplication::getStatus, ApplicaltionStatus.PENDING)
-                    .set(AdoptionApplication::getStatus, ApplicaltionStatus.REJECTED)
+                    .eq(AdoptionApplication::getStatus,ApplicaltionStatus.PENDING)
+                    .set(AdoptionApplication::getStatus,ApplicaltionStatus.REJECTED)
                     .update();
-            Notification notification = BeanUtil.copyProperties(dto, Notification.class);
-            notification.setPublisherId(dto.getReceiverIds().get(0));
-            notification.setApplicantId(userId);
-            notification.setPetId(dto.getPetId());
-            notification.setContent("您的领养申请已被拒绝");
-            notification.setType(NotificationType.NOTIFICATION_TYPE_SYSTEM);
-            notification.setIsRead(ReadStatus.UNREAD);
-            save(notification);
-        }else {
-            //全部拒绝领养申请，其他领养申请状态保持不变
-            applicationService.lambdaUpdate()
-                    .in(AdoptionApplication::getApplicantId, dto.getReceiverIds())
-                    .eq(AdoptionApplication::getPetId, dto.getPetId())
-                    .eq(AdoptionApplication::getStatus, ApplicaltionStatus.PENDING)
-                    .set(AdoptionApplication::getStatus, ApplicaltionStatus.REJECTED)
-                    .update();
-            //批量插入通知
-            //批量插入通知
-            List<Notification> notifications = dto.getReceiverIds().stream()
-                    .map(id -> {
-                        Notification n = BeanUtil.copyProperties(dto, Notification.class);
-                        n.setPublisherId(id);
-                        n.setApplicantId(userId);
-                        n.setPetId(dto.getPetId());
-                        n.setContent("您的领养申请已被拒绝");
-                        n.setType(NotificationType.NOTIFICATION_TYPE_SYSTEM);
-                        n.setIsRead(ReadStatus.UNREAD);
-                        return n;
-                    }).collect(Collectors.toList());
-            saveBatch(notifications);
+            //向其他申请人发送通知，通知被拒绝,批量插入
+            List<Notification> notificationList = new ArrayList<>();
+            for (Long applicantId : dto.getApplicantId()) {
+                Notification notification = new Notification();
+                notification.setType(NotificationType.NOTIFICATION_TYPE_SYSTEM);
+                notification.setIsRead(ReadStatus.UNREAD);
+                notification.setPetId(dto.getPetId());
+                notification.setApplicantId(applicantId);
+                notification.setPublisherId(dto.getPublisherId());
+                notification.setTitle(dto.getRejectReason());
+                notification.setContent("很遗憾，您的领养申请已被拒绝！");
+                notificationList.add(notification);
+            }
+            saveBatch(notificationList);
         }
-
     }
 
+
     @Override
-    public void acceptAdoptionApplication(NotificationDTO dto) {
-        //获取当前用户信息,是发送方ID
-        Long userId = UserContext.getUserId();
-        //直接保存通知到数据库
-        Notification notification = BeanUtil.copyProperties(dto, Notification.class);
-        notification.setPublisherId(dto.getReceiverIds().get(0));
-        notification.setApplicantId(userId);
-        notification.setPetId(dto.getPetId());
-        notification.setContent("恭喜您，您的领养申请已通过通过");
-        notification.setType(NotificationType.NOTIFICATION_TYPE_ADOPTED);
-        notification.setIsRead(ReadStatus.UNREAD);
-        save(notification);
+    public void acceptAdoptionApplication(ProcessDTO dto) {
+        //向领养申请人发送通知，通知领养成功
+        NotificationDTO notificationDTO = new NotificationDTO();
+        notificationDTO.setType(NotificationType.NOTIFICATION_TYPE_ADOPTED);
+        notificationDTO.setIsRead(ReadStatus.UNREAD);
+        notificationDTO.setPetId(dto.getPetId());
+        notificationDTO.setApplicantId(dto.getApplicantId().get(0));
+        notificationDTO.setPublisherId(dto.getPublisherId());
+        notificationDTO.setContent("恭喜您，您的领养申请已通过！");
+        addNotification(notificationDTO);
     }
 }

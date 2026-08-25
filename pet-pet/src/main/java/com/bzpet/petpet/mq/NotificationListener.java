@@ -3,6 +3,7 @@ package com.bzpet.petpet.mq;
 
 import com.bzpet.common.constants.MqConstants;
 import com.bzpet.petpet.domain.dto.NotificationDTO;
+import com.bzpet.petpet.domain.dto.ProcessDTO;
 import com.bzpet.petpet.service.INotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.amqp.rabbit.annotation.Exchange;
@@ -30,7 +31,7 @@ public class NotificationListener {
             exchange = @Exchange(name = MqConstants.Exchange.PET_ADPTION_EXCHANGE,type = "topic"),
             key = MqConstants.Key.PET_ADPTION_ACCEPT_ROUTING_KEY
     ))
-    public void acceptAdoptionApplication(NotificationDTO dto){
+    public void acceptAdoptionApplication(ProcessDTO dto){
         //通过领养申请，更新领养申请状态为已通过
         notificationService.acceptAdoptionApplication(dto);
     }
@@ -40,7 +41,7 @@ public class NotificationListener {
             exchange = @Exchange(name = MqConstants.Exchange.PET_ADPTION_EXCHANGE,type = "topic"),
             key = MqConstants.Key.PET_ADPTION_REJECT_ROUTING_KEY
     ))
-    public void rejectAdoptionApplication(NotificationDTO dto){
+    public void rejectAdoptionApplication(ProcessDTO dto){
         //拒绝领养申请，更新领养申请状态为已拒绝
         notificationService.rejectAdoptionApplication(dto);
     }

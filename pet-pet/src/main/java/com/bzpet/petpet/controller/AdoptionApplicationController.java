@@ -25,7 +25,7 @@ import org.springframework.web.bind.annotation.*;
  * @since 2026-08-23
  */
 @RestController
-@RequestMapping("/pet/adoption")
+@RequestMapping("/pets/adoption")
 @Tag(name = "宠物领养申请相关接口")
 public class AdoptionApplicationController {
     @Autowired

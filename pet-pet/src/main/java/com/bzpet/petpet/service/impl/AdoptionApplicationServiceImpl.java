@@ -12,6 +12,7 @@ import com.bzpet.common.utils.UserContext;
 import com.bzpet.petpet.domain.dto.AdoptionApplyDTO;
 import com.bzpet.petpet.domain.dto.NotificationDTO;
 import com.bzpet.petpet.domain.dto.ProcessApplicationDTO;
+import com.bzpet.petpet.domain.dto.ProcessDTO;
 import com.bzpet.petpet.domain.po.AdoptionApplication;
 import com.bzpet.petpet.domain.po.Pet;
 import com.bzpet.petpet.domain.query.AdoptionApplyQueryDTO;
@@ -23,6 +24,7 @@ import com.bzpet.petpet.service.IAdoptionApplicationService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.bzpet.petpet.service.IPetService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,9 +32,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -81,8 +81,8 @@ public class AdoptionApplicationServiceImpl extends ServiceImpl<AdoptionApplicat
         }
         //向发布人发送通知
         NotificationDTO notificationDTO = new NotificationDTO();
-        notificationDTO.setReceiverIds(Collections.singletonList(pet.getPublisherId()));
-        notificationDTO.setSenderId(userId);
+        notificationDTO.setPublisherId(pet.getPublisherId());
+        notificationDTO.setApplicantId(userId);
         notificationDTO.setPetId(applyDTO.getPetId());
         notificationDTO.setTitle(applyDTO.getReason());
         notificationDTO.setContent("您有新的领养申请");
@@ -155,53 +155,70 @@ public class AdoptionApplicationServiceImpl extends ServiceImpl<AdoptionApplicat
         if (processDTO.getStatus() != ApplicaltionStatus.APPROVED && processDTO.getStatus() != ApplicaltionStatus.REJECTED) {
             throw new BadException("领养申请状态错误");
         }
-        //更新领养申请状态
         boolean isAccept = processDTO.getStatus() == ApplicaltionStatus.APPROVED;
+        //先更新宠物状态，更新宠物状态的时候加乐观锁判断是否成功更新
+        boolean update = petService.lambdaUpdate()
+                .eq(Pet::getStatus, AdoptionStatus.AVAILABLE)
+                .eq(Pet::getId, petId)
+                .set(Pet::getStatus, AdoptionStatus.ADOPTED)
+                .update();
+        if (!update)throw new BadException("宠物状态更新失败");
+        //更新领养申请状态
         application.setStatus(isAccept ?
                 ApplicaltionStatus.APPROVED : ApplicaltionStatus.REJECTED);
         application.setAuditTime(LocalDateTime.now());
+        application.setReason(isAccept ? null :processDTO.getRejectReason());
         updateById(application);
-        //更新宠物状态
-        pet.setStatus(isAccept ?
-                AdoptionStatus.ADOPTED : AdoptionStatus.AVAILABLE);
-        petService.updateById(pet);
+
         //利用同步回调，在事务提交后利用mq通知
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
                 //发送mq通知
+                UUID uuid = UUID.randomUUID();
+                ProcessDTO dto = new ProcessDTO();
+                dto.setPetId(petId);
+                dto.setApplicantId(Collections.singletonList(application.getApplicantId()));
+                dto.setPublisherId(application.getPublisherId());
+                dto.setRejectReason(processDTO.getRejectReason());
+                dto.setIsAccept(isAccept);
                 if (isAccept) {
-                    handleAccept(application.getApplicantId(), petId);
+                    handleAccept(dto, uuid.toString());
                 } else {
-                    handleReject(application.getApplicantId(), petId);
+                    handleReject(dto, uuid.toString());
                 }
             }
         });
         return R.ok("处理成功");
     }
-    private void handleAccept(Long applicanterId, Long petId) {
-        NotificationDTO notificationDTO = new NotificationDTO();
-        notificationDTO.setPetId(petId);
-        notificationDTO.setReceiverIds(Collections.singletonList(applicanterId));
+    private void handleAccept(ProcessDTO dto, String correlationData) {
+        //发送mq通知,执行同意领养业务逻辑
         rabbitTemplate.convertAndSend(
                 MqConstants.Exchange.PET_ADPTION_EXCHANGE,
                 MqConstants.Key.PET_ADPTION_ACCEPT_ROUTING_KEY,
-                notificationDTO
+                dto,
+                new CorrelationData(correlationData)
         );
-        rabbitTemplate.convertAndSend(
-                MqConstants.Exchange.PET_ADPTION_EXCHANGE,
-                MqConstants.Key.PET_ADPTION_REJECT_ROUTING_KEY,
-                notificationDTO
-        );
+        //同意一个人的领养申请，拒绝其他领养申请的领养申请
+        ProcessDTO rejectDTO = BeanUtil.copyProperties(dto, ProcessDTO.class);
+        //查询其他申请人id
+        List<AdoptionApplication> list = lambdaQuery()
+                .eq(AdoptionApplication::getPetId, dto.getPetId())
+                .eq(AdoptionApplication::getPublisherId, dto.getPublisherId())
+                .ne(AdoptionApplication::getApplicantId, dto.getApplicantId().get(0))
+                .list();
+        List<Long> otherApplicantIds = list.stream().map(AdoptionApplication::getApplicantId)
+                .collect(Collectors.toList());
+        rejectDTO.setApplicantId(otherApplicantIds);
+        handleReject(rejectDTO, correlationData);
     }
-    private void handleReject(Long applicanterId, Long petId) {
-        NotificationDTO notificationDTO = new NotificationDTO();
-        notificationDTO.setPetId(petId);
-        notificationDTO.setReceiverIds(Collections.singletonList(applicanterId));
+    private void handleReject(ProcessDTO dto, String correlationData) {
+        //发送mq通知,执行拒绝领养业务逻辑
         rabbitTemplate.convertAndSend(
                 MqConstants.Exchange.PET_ADPTION_EXCHANGE,
                 MqConstants.Key.PET_ADPTION_REJECT_ROUTING_KEY,
-                notificationDTO
+                dto,
+                new CorrelationData(correlationData)
         );
     }
 }

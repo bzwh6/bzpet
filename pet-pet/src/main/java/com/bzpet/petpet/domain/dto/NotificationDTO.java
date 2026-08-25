@@ -25,14 +25,11 @@ import java.util.List;
 @Data
 public class NotificationDTO  {
 
-    @Schema(description="接收者ID列表，用于发送通知给多个用户")
-    private List<Long> receiverIds;
+    @Schema(description="发布人ID（接收者）")
+    private Long publisherId;
 
-    @Schema(description="发送方ID")
-    private Long senderId;
-
-    @Schema(description="领养申请ID列表（用于审核通过通知）")
-    private List<Long> applicationIds;
+    @Schema(description="申请人ID（触发者）")
+    private Long applicantId;
 
     @Schema(description="宠物ID（方便点击跳转详情）")
     private Long petId;
@@ -48,9 +45,6 @@ public class NotificationDTO  {
 
     @Schema(description="已读状态：0未读 1已读")
     private ReadStatus isRead;
-
-    @Schema(description="创建时间")
-    private LocalDateTime createTime;
 
 
 }
