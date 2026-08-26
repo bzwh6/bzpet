@@ -2,6 +2,7 @@ package com.bzpet.petpet.domain.vo;
 
 import com.bzpet.petpet.enums.AdoptionStatus;
 import com.bzpet.petpet.enums.PetGender;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
@@ -33,9 +34,14 @@ public class PetQueryVO {
     @Schema(description="状态 0待领养 1已领养 2下架")
     private AdoptionStatus status;
 
+    @Schema(description="点赞数量")
+    private Integer likesCount;
+
     @Schema(description="创建时间")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createTime;
 
     @Schema(description="更新时间")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime updateTime;
 }

@@ -2,20 +2,33 @@ package com.bzpet.petpet.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
+import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.bzpet.common.constants.RedisConstants;
 import com.bzpet.common.domain.R;
 import com.bzpet.common.domain.dto.PageDTO;
+import com.bzpet.common.exception.BadException;
 import com.bzpet.common.utils.UserContext;
+import com.bzpet.petpet.domain.dto.PetDTO;
 import com.bzpet.petpet.domain.po.Pet;
 import com.bzpet.petpet.domain.query.PetQueryDTO;
 import com.bzpet.petpet.domain.vo.PetQueryVO;
+import com.bzpet.petpet.enums.AdoptionStatus;
+import com.bzpet.petpet.enums.ApplicaltionStatus;
 import com.bzpet.petpet.mapper.PetMapper;
 import com.bzpet.petpet.service.IPetService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -28,7 +41,11 @@ import java.util.stream.Collectors;
  */
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class PetServiceImpl extends ServiceImpl<PetMapper, Pet> implements IPetService {
+    private final StringRedisTemplate stringRedisTemplate;
+    private final RedissonClient redissonClient;
+
 
     @Override
     public R<PageDTO<PetQueryVO>> petList(PetQueryDTO petDTO) {
@@ -53,7 +70,7 @@ public class PetServiceImpl extends ServiceImpl<PetMapper, Pet> implements IPetS
         PageDTO<PetQueryVO> result = new PageDTO<>();
         result.setTotal(page.getTotal());
         result.setPages(page.getPages());
-        if (CollUtil.isEmpty(records)){
+        if (CollUtil.isEmpty(records)) {
             return R.ok(result);
         }
         // 5. 转换结果（Pet -> PetQueryVO）
@@ -63,5 +80,134 @@ public class PetServiceImpl extends ServiceImpl<PetMapper, Pet> implements IPetS
         // 6. 封装分页结果
         result.setList(voList);
         return R.ok(result);
+    }
+
+    @Override
+    public R<PetQueryVO> petDetail(Long id) {
+        //通过redis查询宠物详情
+        String key = RedisConstants.KEY.PET_DETAIL_KEY + id;
+        String p = stringRedisTemplate.opsForValue().get(key);
+        //redis里是否存在
+        if (p != null && !p.isEmpty()) {
+            //存在，直接返回结果
+            Pet bean = JSONUtil.toBean(p, Pet.class);
+            PetQueryVO vo = BeanUtil.copyProperties(bean, PetQueryVO.class);
+            return R.ok(vo);
+        } else if (Objects.equals(p, "")) {
+            //redis里存在空值，说明宠物不存在
+            return R.error("宠物不存在");
+        }
+        //不存在，从数据库查
+        //用redisson锁，防止并发查询数据库，解决缓存击穿问题
+        RLock lock = redissonClient.getLock(id.toString());
+        boolean tryLock = lock.tryLock();
+        try {
+            if (tryLock) {
+                //先查缓存，看看是否重建了
+                p = stringRedisTemplate.opsForValue().get(key);
+                if (p != null && !p.isEmpty()) {
+                    //存在，直接返回结果
+                    Pet bean = JSONUtil.toBean(p, Pet.class);
+                    PetQueryVO vo = BeanUtil.copyProperties(bean, PetQueryVO.class);
+                    return R.ok(vo);
+                }
+                //不存在，从数据库查
+                Pet pet = getById(id);
+                if (pet == null) {
+                    //数据库也不存在，redis里存空值
+                    stringRedisTemplate.opsForValue()
+                            .set(key, "", RedisConstants.EXPIRE.NULL_EXPIRE, TimeUnit.SECONDS);
+                    return R.error("宠物不存在");
+                }
+                //存在，写入redis,
+                String jsonStr = JSONUtil.toJsonStr(pet);
+                //0-5分钟的随机过期时间
+                long randomExpire = ThreadLocalRandom.current().nextLong(0, 5 * 60);
+                stringRedisTemplate.opsForValue()
+                        .set(key, jsonStr, RedisConstants.EXPIRE.PET_DETAIL_EXPIRE + randomExpire,
+                                TimeUnit.SECONDS);
+                return R.ok(BeanUtil.copyProperties(pet, PetQueryVO.class));
+            }else {
+                //获取锁失败，说明有其他线程正在重建缓存，等它重建完成
+                //休眠50毫秒，等它重建完成后再试一次
+                for (int i = 0;i < 3;i++){
+                    Thread.sleep(50);
+                    String jsonStr = stringRedisTemplate.opsForValue().get(key);
+                    //redis里是否存在
+                    if (jsonStr != null && !jsonStr.isEmpty()) {
+                        //存在，直接返回结果
+                        Pet bean = JSONUtil.toBean(jsonStr, Pet.class);
+                        PetQueryVO vo = BeanUtil.copyProperties(bean, PetQueryVO.class);
+                        return R.ok(vo);
+                    } else if (Objects.equals(jsonStr, "")) {
+                        //redis里存在空值，说明宠物不存在
+                        return R.error("宠物不存在");
+                    }
+                }
+                return R.error("系统繁忙，请稍后重试");
+            }
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        } finally {
+            if (tryLock) {
+                lock.unlock();
+            }
+        }
+    }
+
+    @Override
+    public void addPet(PetDTO petDTO) {
+        //转换为Pet对象
+        Pet pet = BeanUtil.copyProperties(petDTO, Pet.class);
+        //设置发布人ID
+        pet.setPublisherId(UserContext.getUserId());
+        //设置状态为待领养
+        pet.setStatus(AdoptionStatus.AVAILABLE);
+        //保存到数据库
+        save(pet);
+    }
+
+    @Override
+    public void deletePet(Long id) {
+        //查询宠物是否存在
+        Pet pet = getById(id);
+        checkPet(pet, UserContext.getUserId());
+        //删除宠物缓存
+        stringRedisTemplate.delete(RedisConstants.KEY.PET_DETAIL_KEY + id);
+        //删除宠物,只有待领养的宠物才能删除
+        if (pet.getStatus() != AdoptionStatus.AVAILABLE) {
+            throw new BadException("只有待领养的宠物才能删除");
+        }
+        removeById(id);
+    }
+
+    @Override
+    public void updatePet(Long id, PetDTO petDTO) {
+        //查询宠物是否存在
+        Pet pet = getById(id);
+        checkPet(pet, UserContext.getUserId());
+        //更新数据库
+        lambdaUpdate()
+                .eq(Pet::getId, id)
+                .set(petDTO.getPetName() != null, Pet::getPetName, petDTO.getPetName())
+                .set(petDTO.getBreed() != null, Pet::getBreed, petDTO.getBreed())
+                .set(petDTO.getAge() != null, Pet::getAge, petDTO.getAge())
+                .set(petDTO.getGender() != null, Pet::getGender, petDTO.getGender())
+                .set(petDTO.getDescription() != null, Pet::getDescription, petDTO.getDescription())
+                .set(petDTO.getImageUrl() != null, Pet::getImageUrl, petDTO.getImageUrl())
+                .update();
+        //删除宠物缓存
+        stringRedisTemplate.delete(RedisConstants.KEY.PET_DETAIL_KEY + id);
+    }
+
+    private void checkPet(Pet pet, Long userId) {
+        //检查发布人是否是当前用户
+        //检查宠物是否存在
+        if (pet == null) {
+            throw new BadException("宠物不存在");
+        }
+        if (!Objects.equals(pet.getPublisherId(), userId)) {
+            throw new BadException("只有发布人才能更新");
+        }
     }
 }

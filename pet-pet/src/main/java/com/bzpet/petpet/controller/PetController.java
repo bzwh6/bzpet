@@ -4,19 +4,17 @@ package com.bzpet.petpet.controller;
 
 import com.bzpet.common.domain.R;
 import com.bzpet.common.domain.dto.PageDTO;
+import com.bzpet.petpet.domain.dto.PetDTO;
 import com.bzpet.petpet.domain.query.PetQueryDTO;
 import com.bzpet.petpet.domain.vo.PetQueryVO;
 import com.bzpet.petpet.service.IPetService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
@@ -40,6 +38,26 @@ public class PetController {
     public R<PageDTO<PetQueryVO>> petList(@ParameterObject PetQueryDTO petDTO) {
         return petService.petList(petDTO);
     }
+    @Operation(summary="查询宠物详情")
+    @GetMapping("/detail/{id}")
+    public R<PetQueryVO> petDetail(@PathVariable Long id) {
+        return petService.petDetail(id);
+    }
 
+    @Operation(summary="新增宠物")
+    @PostMapping("/add")
+    public void addPet(@RequestBody PetDTO petDTO) {
+        petService.addPet(petDTO);
+    }
+    @Operation(summary="更新宠物")
+    @PostMapping("/update/{id}")
+    public void updatePet(@PathVariable Long id, @RequestBody PetDTO petDTO) {
+        petService.updatePet(id, petDTO);
+    }
+    @Operation(summary="删除宠物")
+    @DeleteMapping("/delete/{id}")
+    public void deletePet(@PathVariable Long id) {
+        petService.deletePet(id);
+    }
 
 }

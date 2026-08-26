@@ -109,7 +109,7 @@ public class AdoptionApplicationServiceImpl extends ServiceImpl<AdoptionApplicat
         PageDTO<AdoptionApplyVO> pageDTO = new PageDTO<>();
         pageDTO.setTotal(page.getTotal());
         pageDTO.setPages(page.getPages());
-        if (CollUtil.isEmpty(records)){
+        if (CollUtil.isEmpty(records)) {
             return R.ok(pageDTO);
         }
         //转换为VO
@@ -162,12 +162,12 @@ public class AdoptionApplicationServiceImpl extends ServiceImpl<AdoptionApplicat
                 .eq(Pet::getId, petId)
                 .set(Pet::getStatus, AdoptionStatus.ADOPTED)
                 .update();
-        if (!update)throw new BadException("宠物状态更新失败");
+        if (!update) throw new BadException("宠物状态更新失败");
         //更新领养申请状态
         application.setStatus(isAccept ?
                 ApplicaltionStatus.APPROVED : ApplicaltionStatus.REJECTED);
         application.setAuditTime(LocalDateTime.now());
-        application.setReason(isAccept ? null :processDTO.getRejectReason());
+        application.setReason(isAccept ? null : processDTO.getRejectReason());
         updateById(application);
 
         //利用同步回调，在事务提交后利用mq通知
@@ -191,6 +191,7 @@ public class AdoptionApplicationServiceImpl extends ServiceImpl<AdoptionApplicat
         });
         return R.ok("处理成功");
     }
+
     private void handleAccept(ProcessDTO dto, String correlationData) {
         //发送mq通知,执行同意领养业务逻辑
         rabbitTemplate.convertAndSend(
@@ -212,6 +213,7 @@ public class AdoptionApplicationServiceImpl extends ServiceImpl<AdoptionApplicat
         rejectDTO.setApplicantId(otherApplicantIds);
         handleReject(rejectDTO, correlationData);
     }
+
     private void handleReject(ProcessDTO dto, String correlationData) {
         //发送mq通知,执行拒绝领养业务逻辑
         rabbitTemplate.convertAndSend(

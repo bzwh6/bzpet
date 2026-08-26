@@ -5,6 +5,7 @@ import com.bzpet.petuser.domain.dto.LoginFormDTO;
 import com.bzpet.petuser.domain.dto.RegisterDTO;
 import com.bzpet.petuser.domain.po.User;
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.bzpet.petuser.domain.vo.UserVO;
 import jakarta.validation.Valid;
 
 /**
@@ -20,4 +21,6 @@ public interface IUserService extends IService<User> {
     R<String> logIn(LoginFormDTO loginFormDTO);
 
     R<String> register(@Valid RegisterDTO registerDTO);
+
+    R<UserVO> userInfo(Long id);
 }

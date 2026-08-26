@@ -4,15 +4,13 @@ package com.bzpet.petuser.controller;
 import com.bzpet.common.domain.R;
 import com.bzpet.petuser.domain.dto.LoginFormDTO;
 import com.bzpet.petuser.domain.dto.RegisterDTO;
+import com.bzpet.petuser.domain.vo.UserVO;
 import com.bzpet.petuser.service.IUserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 
 /**
@@ -39,5 +37,10 @@ public class UserController {
     @Operation(summary = "注册接口")
     public R<String> register(@Valid @RequestBody RegisterDTO registerDTO){
         return userService.register(registerDTO);
+    }
+    @PostMapping("/userInfo/{id}")
+    @Operation(summary = "用户信息接口")
+    public R<UserVO> userInfo(@PathVariable Long id){
+        return userService.userInfo(id);
     }
 }

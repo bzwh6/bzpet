@@ -4,3 +4,4 @@ com.bzpet.common.autoConfig.handler.MyMetaObjectHandler
 com.bzpet.common.autoConfig.interceptor.WebMvcConfiguration
 com.bzpet.common.autoConfig.mp.MybatisPlusConfig
 com.bzpet.common.autoConfig.mq.RabbitMQConfiguration
+com.bzpet.common.autoConfig.redis.RedissonConfig
