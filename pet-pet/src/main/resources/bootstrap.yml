@@ -18,6 +18,8 @@ spring:
             refresh: true
           - data-id: shared-mysql.yaml # 共享mysql配置
             refresh: true
+          - data-id: shared-xxljob.yaml # 共享xxljob配置
+            refresh: true
 
 bz:
   swagger:

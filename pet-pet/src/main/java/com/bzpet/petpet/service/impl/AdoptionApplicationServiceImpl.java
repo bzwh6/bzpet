@@ -2,6 +2,7 @@ package com.bzpet.petpet.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
+import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.bzpet.common.constants.MqConstants;
 import com.bzpet.common.domain.R;
@@ -14,17 +15,19 @@ import com.bzpet.petpet.domain.dto.NotificationDTO;
 import com.bzpet.petpet.domain.dto.ProcessApplicationDTO;
 import com.bzpet.petpet.domain.dto.ProcessDTO;
 import com.bzpet.petpet.domain.po.AdoptionApplication;
+import com.bzpet.petpet.domain.po.MessageCompensation;
 import com.bzpet.petpet.domain.po.Pet;
 import com.bzpet.petpet.domain.query.AdoptionApplyQueryDTO;
 import com.bzpet.petpet.domain.vo.AdoptionApplyVO;
 import com.bzpet.petpet.enums.AdoptionStatus;
 import com.bzpet.petpet.enums.ApplicaltionStatus;
+import com.bzpet.petpet.enums.BusinessType;
 import com.bzpet.petpet.mapper.AdoptionApplicationMapper;
 import com.bzpet.petpet.service.IAdoptionApplicationService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.bzpet.petpet.service.IPetService;
+import com.bzpet.petpet.service.IMessageCompensationService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,7 +36,6 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * <p>
@@ -48,6 +50,7 @@ import java.util.stream.Collectors;
 public class AdoptionApplicationServiceImpl extends ServiceImpl<AdoptionApplicationMapper, AdoptionApplication> implements IAdoptionApplicationService {
     private final IPetService petService;
     private final RabbitTemplate rabbitTemplate;
+    private final IMessageCompensationService messageCompensationService;
 
     @Override
     public R<String> applyAdoption(AdoptionApplyDTO applyDTO) {
@@ -160,7 +163,7 @@ public class AdoptionApplicationServiceImpl extends ServiceImpl<AdoptionApplicat
         boolean update = petService.lambdaUpdate()
                 .eq(Pet::getStatus, AdoptionStatus.AVAILABLE)
                 .eq(Pet::getId, petId)
-                .set(Pet::getStatus, AdoptionStatus.ADOPTED)
+                .set(isAccept ,Pet::getStatus, AdoptionStatus.ADOPTED)
                 .update();
         if (!update) throw new BadException("宠物状态更新失败");
         //更新领养申请状态
@@ -169,58 +172,69 @@ public class AdoptionApplicationServiceImpl extends ServiceImpl<AdoptionApplicat
         application.setAuditTime(LocalDateTime.now());
         application.setReason(isAccept ? null : processDTO.getRejectReason());
         updateById(application);
+        //创建消息内容
+        ProcessDTO dto = new ProcessDTO();
+        dto.setPetId(petId);
+        dto.setApplicantId(Collections.singletonList(application.getApplicantId()));
+        dto.setPublisherId(application.getPublisherId());
+        dto.setIsAccept(isAccept);
+        dto.setRejectReason(processDTO.getRejectReason());
+        String messageId = applicationId + "_" + System.currentTimeMillis();
+        //保存到本地补偿表
+        MessageCompensation compensation = new MessageCompensation();
+        compensation.setBusinessType(BusinessType.ADOPTION_APPROVE.getDesc());
+        compensation.setApplicationId(applicationId);
+        compensation.setReceiverIds(String.valueOf(application.getApplicantId()));
+        compensation.setExchangeName(MqConstants.Exchange.PET_ADPTION_EXCHANGE);
+        compensation.setRoutingKey(isAccept ?
+                MqConstants.Key.PET_ADPTION_ACCEPT_ROUTING_KEY :
+                MqConstants.Key.PET_ADPTION_REJECT_ROUTING_KEY);
+        compensation.setMessageId(messageId);
+        compensation.setMessageContent(JSONUtil.toJsonStr(dto));
+        Long compensationId = messageCompensationService.savePendingMessage(compensation);
 
-        //利用同步回调，在事务提交后利用mq通知
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                //发送mq通知
-                UUID uuid = UUID.randomUUID();
-                ProcessDTO dto = new ProcessDTO();
-                dto.setPetId(petId);
-                dto.setApplicantId(Collections.singletonList(application.getApplicantId()));
-                dto.setPublisherId(application.getPublisherId());
-                dto.setRejectReason(processDTO.getRejectReason());
-                dto.setIsAccept(isAccept);
                 if (isAccept) {
-                    handleAccept(dto, uuid.toString());
+                    handleAccept(dto, compensationId);
                 } else {
-                    handleReject(dto, uuid.toString());
+                    messageCompensationService.sendAndUpdateStatus(compensationId);
                 }
             }
         });
         return R.ok("处理成功");
     }
 
-    private void handleAccept(ProcessDTO dto, String correlationData) {
-        //发送mq通知,执行同意领养业务逻辑
-        rabbitTemplate.convertAndSend(
-                MqConstants.Exchange.PET_ADPTION_EXCHANGE,
-                MqConstants.Key.PET_ADPTION_ACCEPT_ROUTING_KEY,
-                dto,
-                new CorrelationData(correlationData)
-        );
-        //同意一个人的领养申请，拒绝其他领养申请的领养申请
-        ProcessDTO rejectDTO = BeanUtil.copyProperties(dto, ProcessDTO.class);
-        //查询其他申请人id
-        List<AdoptionApplication> list = lambdaQuery()
+    private void handleAccept(ProcessDTO dto, Long compensationId) {
+        messageCompensationService.sendAndUpdateStatus(compensationId);
+        List<AdoptionApplication> otherApps = lambdaQuery()
                 .eq(AdoptionApplication::getPetId, dto.getPetId())
                 .eq(AdoptionApplication::getPublisherId, dto.getPublisherId())
                 .ne(AdoptionApplication::getApplicantId, dto.getApplicantId().get(0))
                 .list();
-        List<Long> otherApplicantIds = list.stream().map(AdoptionApplication::getApplicantId)
-                .collect(Collectors.toList());
-        rejectDTO.setApplicantId(otherApplicantIds);
-        handleReject(rejectDTO, correlationData);
-    }
+        if (CollUtil.isEmpty(otherApps)) {
+            return;
+        }
+        for (AdoptionApplication app : otherApps) {
+            ProcessDTO rejectDTO = new ProcessDTO();
+            rejectDTO.setPetId(dto.getPetId());
+            rejectDTO.setApplicantId(Collections.singletonList(app.getApplicantId()));
+            rejectDTO.setPublisherId(dto.getPublisherId());
+            rejectDTO.setIsAccept(false);
+            rejectDTO.setRejectReason("该宠物已被其他人领养");
 
-    private void handleReject(ProcessDTO dto, String correlationData) {
-        //发送mq通知,执行拒绝领养业务逻辑
-        rabbitTemplate.convertAndSend(
-                MqConstants.Exchange.PET_ADPTION_EXCHANGE,
-                MqConstants.Key.PET_ADPTION_REJECT_ROUTING_KEY,
-                dto,
-                new CorrelationData(correlationData)
-        );
+            String rejectMsgId = app.getId() + "_reject_" + System.currentTimeMillis();
+            MessageCompensation compensation = new MessageCompensation();
+            compensation.setBusinessType(BusinessType.ADOPTION_APPROVE.getDesc());
+            compensation.setApplicationId(app.getId());
+            compensation.setReceiverIds(String.valueOf(app.getApplicantId()));
+            compensation.setExchangeName(MqConstants.Exchange.PET_ADPTION_EXCHANGE);
+            compensation.setRoutingKey(MqConstants.Key.PET_ADPTION_REJECT_ROUTING_KEY);
+            compensation.setMessageId(rejectMsgId);
+            compensation.setMessageContent(JSONUtil.toJsonStr(rejectDTO));
+            Long rejectCompId = messageCompensationService.savePendingMessage(compensation);
+            messageCompensationService.sendAndUpdateStatus(rejectCompId);
+        }
     }
 }

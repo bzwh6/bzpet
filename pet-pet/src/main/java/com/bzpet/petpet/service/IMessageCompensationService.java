@@ -13,4 +13,9 @@ import com.baomidou.mybatisplus.extension.service.IService;
  */
 public interface IMessageCompensationService extends IService<MessageCompensation> {
 
+    Long savePendingMessage(MessageCompensation compensation);
+
+    void sendAndUpdateStatus(Long compensationId);
+
+    void retryFailedMessages();
 }

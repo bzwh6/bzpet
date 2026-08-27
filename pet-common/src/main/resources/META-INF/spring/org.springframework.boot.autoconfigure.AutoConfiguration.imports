@@ -5,3 +5,4 @@ com.bzpet.common.autoConfig.interceptor.WebMvcConfiguration
 com.bzpet.common.autoConfig.mp.MybatisPlusConfig
 com.bzpet.common.autoConfig.mq.RabbitMQConfiguration
 com.bzpet.common.autoConfig.redis.RedissonConfig
+com.bzpet.common.autoConfig.xxljob.XxlJobConfig
