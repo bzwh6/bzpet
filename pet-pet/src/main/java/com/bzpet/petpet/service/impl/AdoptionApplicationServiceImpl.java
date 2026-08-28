@@ -10,6 +10,8 @@ import com.bzpet.common.domain.dto.PageDTO;
 import com.bzpet.common.enums.NotificationType;
 import com.bzpet.common.exception.BadException;
 import com.bzpet.common.utils.UserContext;
+import com.bzpet.petapi.client.user.UserClient;
+import com.bzpet.petapi.domain.vo.UserVO;
 import com.bzpet.petpet.domain.dto.AdoptionApplyDTO;
 import com.bzpet.petpet.domain.dto.NotificationDTO;
 import com.bzpet.petpet.domain.dto.ProcessApplicationDTO;
@@ -36,6 +38,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * <p>
@@ -51,6 +54,7 @@ public class AdoptionApplicationServiceImpl extends ServiceImpl<AdoptionApplicat
     private final IPetService petService;
     private final RabbitTemplate rabbitTemplate;
     private final IMessageCompensationService messageCompensationService;
+    private final UserClient userClient;
 
     @Override
     public R<String> applyAdoption(AdoptionApplyDTO applyDTO) {
@@ -115,10 +119,18 @@ public class AdoptionApplicationServiceImpl extends ServiceImpl<AdoptionApplicat
         if (CollUtil.isEmpty(records)) {
             return R.ok(pageDTO);
         }
+        //查询发布人昵称，头像信息
+        List<Long> publisherIds = records.stream()
+                .map(AdoptionApplication::getPublisherId).collect(Collectors.toList());
+        List<UserVO> userVOS = userClient.userInfoList(publisherIds).getData();
+        Map<Long, UserVO> collect = userVOS.stream().collect(Collectors.toMap(UserVO::getId, u -> u));
         //转换为VO
         List<AdoptionApplyVO> voList = new ArrayList<>(records.size());
         for (AdoptionApplication record : records) {
             AdoptionApplyVO vo = BeanUtil.copyProperties(record, AdoptionApplyVO.class);
+            UserVO userVO = collect.get(record.getPublisherId());
+            vo.setPublisherNickname(userVO.getNickname());
+            vo.setPublisherAvatar(userVO.getAvatar());
             voList.add(vo);
         }
         pageDTO.setList(voList);

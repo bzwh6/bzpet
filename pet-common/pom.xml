@@ -61,11 +61,6 @@
             <groupId>org.redisson</groupId>
             <artifactId>redisson</artifactId>
         </dependency>
-        <!-- 引入 OpenFeign -->
-        <dependency>
-            <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-starter-openfeign</artifactId>
-        </dependency>
         <!--xxl-job-->
         <dependency>
             <groupId>com.xuxueli</groupId>

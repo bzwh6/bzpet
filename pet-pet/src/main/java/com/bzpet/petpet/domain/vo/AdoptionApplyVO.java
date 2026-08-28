@@ -35,6 +35,12 @@ public class AdoptionApplyVO  {
     @Schema(description="宠物发布人ID")
     private Long publisherId;
 
+    @Schema(description = "发布人呢称")
+    private String publisherNickname;
+
+    @Schema(description = "发布人头像")
+    private String publisherAvatar;
+
     @Schema(description="领养理由")
     private String reason;
 

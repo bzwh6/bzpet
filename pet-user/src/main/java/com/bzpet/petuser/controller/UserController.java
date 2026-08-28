@@ -4,6 +4,7 @@ package com.bzpet.petuser.controller;
 import com.bzpet.common.domain.R;
 import com.bzpet.petuser.domain.dto.LoginFormDTO;
 import com.bzpet.petuser.domain.dto.RegisterDTO;
+import com.bzpet.petuser.domain.vo.UserInfoVO;
 import com.bzpet.petuser.domain.vo.UserVO;
 import com.bzpet.petuser.service.IUserService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -11,6 +12,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 
 /**
@@ -33,14 +36,22 @@ public class UserController {
     public R<String> logIn(@Valid @RequestBody LoginFormDTO loginFormDTO){
         return userService.logIn(loginFormDTO);
     }
+
     @PostMapping("/register")
     @Operation(summary = "注册接口")
     public R<String> register(@Valid @RequestBody RegisterDTO registerDTO){
         return userService.register(registerDTO);
     }
-    @PostMapping("/userInfo/{id}")
+
+    @GetMapping("/userInfo/{id}")
     @Operation(summary = "用户信息接口")
-    public R<UserVO> userInfo(@PathVariable Long id){
+    public R<UserInfoVO> userInfo(@PathVariable Long id){
         return userService.userInfo(id);
+    }
+
+    @GetMapping("/list")
+    @Operation(summary = "用户列表接口")
+    public R<List<UserVO>> userInfoList(@RequestParam List<Long> ids){
+        return userService.userInfoList(ids);
     }
 }

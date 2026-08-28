@@ -11,6 +11,8 @@ import java.time.LocalDateTime;
 
 @Data
 public class UserVO {
+    @Schema(description = "用户ID")
+    private Long id;
 
     @Schema(description = "昵称")
     private String nickname;
