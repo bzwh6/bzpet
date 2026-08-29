@@ -24,6 +24,7 @@ public class GlobalExceptionHandler {
         log.error("业务异常：状态码{},错误信息{}", e.getCode(), e.getMessage());
         return R.error(e.getCode(), e.getMessage());
     }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public R<Void> handleMethodArgumentNotValidException(MethodArgumentNotValidException e){
@@ -32,5 +33,13 @@ public class GlobalExceptionHandler {
                 .collect(Collectors.joining(","));
         log.error("方法参数校验失败：{}", message);
         return R.error(ErrorInfo.Code.FAILED, message);
+    }
+
+    @ExceptionHandler(Exception.class)
+    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+    public R<Void> handleException(Exception e){
+        String message = e.getMessage();
+        log.error("服务器异常错误信息：{}", message);
+        return R.error(ErrorInfo.Code.FAILED, ErrorInfo.Msg.SERVER_INTER_ERROR);
     }
 }

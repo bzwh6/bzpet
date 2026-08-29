@@ -10,6 +10,8 @@ import java.util.List;
 public class ProcessDTO {
     @Schema(description="宠物ID")
     private Long petId;
+    @Schema(description="申请ID")
+    private Long applicationId;
     @Schema(description="申请人ID")
     private List<Long> applicantId;
     @Schema(description="发布人ID")

@@ -7,6 +7,8 @@ import com.bzpet.common.enums.ReadStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
+import java.time.LocalDateTime;
+
 @Data
 public class NotificationQueryVO {
     @Schema(description="主键ID")
@@ -20,6 +22,12 @@ public class NotificationQueryVO {
 
     @Schema(description="宠物ID（方便点击跳转详情）")
     private Long petId;
+
+    @Schema(description = "对应业务Id（跳转目标）")
+    private Long applicationId;
+
+    @Schema(description = "创建时间")
+    private LocalDateTime createTime;
 
     @Schema(description="标题（即申请人的申请内容）")
     private String title;

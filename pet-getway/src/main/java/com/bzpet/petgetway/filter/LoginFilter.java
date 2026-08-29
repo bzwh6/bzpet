@@ -44,7 +44,7 @@ public class LoginFilter implements GlobalFilter, Ordered {
         //验证token
         try {
             Map<String, Object> map = JwtUtil.parseToken(token);
-            //向下游传递
+            //向下游传递用户id和签名
             log.info("解析出来的userId:{}",map.get("userId").toString());
             ServerHttpRequest httpRequest = request.mutate()
                     .header("userId", map.get("userId").toString())

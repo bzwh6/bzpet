@@ -22,7 +22,7 @@ public interface IPetService extends IService<Pet> {
 
     R<PageDTO<PetQueryVO>> petList(PetQueryDTO petDTO);
 
-    R<PetQueryVO> petDetail(Long id);
+    R<PetQueryVO> petDetail(Long id) throws InterruptedException;
 
     void addPet(PetDTO petDTO);
 

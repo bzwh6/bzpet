@@ -17,7 +17,7 @@ public interface UserClient {
     @Operation(summary = "用户信息接口")
     public R<UserInfoVO> userInfo(@PathVariable Long id);
 
-    @GetMapping("/list")
+    @GetMapping("/user/list")
     @Operation(summary = "用户列表接口")
     public R<List<UserVO>> userInfoList(@RequestParam List<Long> ids);
 }

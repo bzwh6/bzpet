@@ -34,6 +34,12 @@ public class NotificationDTO  {
     @Schema(description="宠物ID（方便点击跳转详情）")
     private Long petId;
 
+    @Schema(description = "对应业务Id（跳转目标）")
+    private Long applicationId;
+
+    @Schema(description = "接收者ID（通知发给谁）")
+    private Long receiverId;
+
     @Schema(description="标题（即申请人的申请内容）")
     private String title;
 

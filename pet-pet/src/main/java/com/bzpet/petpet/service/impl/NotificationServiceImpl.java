@@ -2,14 +2,21 @@ package com.bzpet.petpet.service.impl;
 
 
 import cn.hutool.core.bean.BeanUtil;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.bzpet.common.domain.R;
+import com.bzpet.common.domain.dto.PageDTO;
 import com.bzpet.common.enums.NotificationType;
 import com.bzpet.common.enums.ReadStatus;
+import com.bzpet.common.exception.BadException;
 import com.bzpet.common.utils.UserContext;
 import com.bzpet.petpet.domain.dto.NotificationDTO;
 import com.bzpet.petpet.domain.dto.ProcessDTO;
 import com.bzpet.petpet.domain.po.AdoptionApplication;
 import com.bzpet.petpet.domain.po.Notification;
 import com.bzpet.petpet.domain.po.Pet;
+import com.bzpet.petpet.domain.query.NotificationQueryDTO;
+import com.bzpet.petpet.domain.vo.NotificationQueryVO;
+import com.bzpet.petpet.domain.vo.NotificationVO;
 import com.bzpet.petpet.enums.AdoptionStatus;
 import com.bzpet.petpet.enums.ApplicaltionStatus;
 import com.bzpet.petpet.mapper.NotificationMapper;
@@ -59,6 +66,8 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
             notificationDTO.setIsRead(ReadStatus.UNREAD);
             notificationDTO.setPetId(dto.getPetId());
             notificationDTO.setApplicantId(dto.getApplicantId().get(0));
+            notificationDTO.setReceiverId(dto.getApplicantId().get(0));
+            notificationDTO.setApplicationId(dto.getApplicationId());
             notificationDTO.setPublisherId(dto.getPublisherId());
             notificationDTO.setTitle(dto.getRejectReason());
             notificationDTO.setContent("很遗憾，您的领养申请已被拒绝！");
@@ -81,6 +90,8 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
                 notification.setIsRead(ReadStatus.UNREAD);
                 notification.setPetId(dto.getPetId());
                 notification.setApplicantId(applicantId);
+                notification.setReceiverId(applicantId);
+                notification.setApplicationId(dto.getApplicationId());
                 notification.setPublisherId(dto.getPublisherId());
                 notification.setTitle(dto.getRejectReason());
                 notification.setContent("很遗憾，您的领养申请已被拒绝！");
@@ -99,8 +110,100 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
         notificationDTO.setIsRead(ReadStatus.UNREAD);
         notificationDTO.setPetId(dto.getPetId());
         notificationDTO.setApplicantId(dto.getApplicantId().get(0));
+        notificationDTO.setReceiverId(dto.getApplicantId().get(0));
+        notificationDTO.setApplicationId(dto.getApplicationId());
         notificationDTO.setPublisherId(dto.getPublisherId());
         notificationDTO.setContent("恭喜您，您的领养申请已通过！");
         addNotification(notificationDTO);
+    }
+
+    @Override
+    public R<PageDTO<NotificationQueryVO>> queryList(NotificationQueryDTO dto) {
+        //根据查询参数查询我的通知列表（接收者）
+        Long userId = UserContext.getUserId();
+        Page<Notification> page = lambdaQuery()
+                .eq(Notification::getReceiverId, userId)
+                .eq(dto.getType() != null, Notification::getType, dto.getType())
+                .eq(dto.getIsRead() != null, Notification::getIsRead, dto.getIsRead())
+                .orderByDesc(Notification::getCreateTime)
+                .page(new Page<>(dto.getPageNo(), dto.getPageSize()));
+        PageDTO<NotificationQueryVO> pageDTO = new PageDTO<>();
+        pageDTO.setTotal(page.getTotal());
+        pageDTO.setPages(page.getPages());
+        List<NotificationQueryVO> voList = page.getRecords().stream()
+                .map(notification -> BeanUtil.copyProperties(notification, NotificationQueryVO.class))
+                .collect(Collectors.toList());
+        pageDTO.setList(voList);
+        return R.ok(pageDTO);
+    }
+
+    @Override
+    public R<NotificationVO> queryDetail(Long id) {
+        //查询通知，并校验必须是当前用户接收的
+        Long userId = UserContext.getUserId();
+        Notification notification = lambdaQuery()
+                .eq(Notification::getId, id)
+                .eq(Notification::getReceiverId, userId)
+                .one();
+        if (notification == null) {
+            throw new BadException("通知不存在");
+        }
+        //点击进入通知，修改为已读（条件更新，天然幂等）
+        lambdaUpdate()
+                .eq(Notification::getId, id)
+                .eq(Notification::getIsRead, ReadStatus.UNREAD)
+                .set(Notification::getIsRead, ReadStatus.READ)
+                .update();
+        //返回跳转信息
+        NotificationVO vo = new NotificationVO();
+        vo.setApplicationId(notification.getApplicationId());
+        vo.setType(notification.getType());
+        vo.setTitle(notification.getTitle());
+        vo.setContent(notification.getContent());
+        vo.setIsRead(ReadStatus.READ);
+        vo.setCreateTime(notification.getCreateTime());
+        return R.ok(vo);
+    }
+
+    @Override
+    public R<Void> markAllRead() {
+        //把当前用户接收的所有未读通知置为已读
+        Long userId = UserContext.getUserId();
+        lambdaUpdate()
+                .eq(Notification::getReceiverId, userId)
+                .eq(Notification::getIsRead, ReadStatus.UNREAD)
+                .set(Notification::getIsRead, ReadStatus.READ)
+                .update();
+        return R.ok();
+    }
+
+    @Override
+    public R<Void> deleteRead() {
+        //删除当前用户的所有已读通知
+        Long userId = UserContext.getUserId();
+        lambdaUpdate()
+                .eq(Notification::getReceiverId, userId)
+                .eq(Notification::getIsRead, ReadStatus.READ)
+                .remove();
+        return R.ok();
+    }
+
+    @Override
+    public R<Void> deleteNotification(Long id) {
+        //查询通知，并校验必须是当前用户接收的
+        Long userId = UserContext.getUserId();
+        Notification notification = lambdaQuery()
+                .eq(Notification::getId, id)
+                .eq(Notification::getReceiverId, userId)
+                .one();
+        if (notification == null) {
+            throw new BadException("通知不存在");
+        }
+        //判断通知是否已读
+        if (notification.getIsRead() != ReadStatus.READ) {
+            throw new BadException("未读通知不能删除");
+        }
+        removeById(id);
+        return R.ok();
     }
 }

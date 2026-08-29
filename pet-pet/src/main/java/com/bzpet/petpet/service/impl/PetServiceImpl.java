@@ -83,7 +83,7 @@ public class PetServiceImpl extends ServiceImpl<PetMapper, Pet> implements IPetS
     }
 
     @Override
-    public R<PetQueryVO> petDetail(Long id) {
+    public R<PetQueryVO> petDetail(Long id) throws InterruptedException {
         //通过redis查询宠物详情
         String key = RedisConstants.KEY.PET_DETAIL_KEY + id;
         String p = stringRedisTemplate.opsForValue().get(key);
@@ -100,56 +100,40 @@ public class PetServiceImpl extends ServiceImpl<PetMapper, Pet> implements IPetS
         //不存在，从数据库查
         //用redisson锁，防止并发查询数据库，解决缓存击穿问题
         RLock lock = redissonClient.getLock(id.toString());
-        boolean tryLock = lock.tryLock();
+        boolean tryLock = lock.tryLock(1, 2, TimeUnit.SECONDS);
         try {
-            if (tryLock) {
-                //先查缓存，看看是否重建了
-                p = stringRedisTemplate.opsForValue().get(key);
-                if (p != null && !p.isEmpty()) {
-                    //存在，直接返回结果
-                    Pet bean = JSONUtil.toBean(p, Pet.class);
-                    PetQueryVO vo = BeanUtil.copyProperties(bean, PetQueryVO.class);
-                    return R.ok(vo);
-                }
-                //不存在，从数据库查
-                Pet pet = getById(id);
-                if (pet == null) {
-                    //数据库也不存在，redis里存空值
-                    stringRedisTemplate.opsForValue()
-                            .set(key, "", RedisConstants.EXPIRE.NULL_EXPIRE, TimeUnit.SECONDS);
-                    return R.error("宠物不存在");
-                }
-                //存在，写入redis,
-                String jsonStr = JSONUtil.toJsonStr(pet);
-                //0-5分钟的随机过期时间
-                long randomExpire = ThreadLocalRandom.current().nextLong(0, 5 * 60);
-                stringRedisTemplate.opsForValue()
-                        .set(key, jsonStr, RedisConstants.EXPIRE.PET_DETAIL_EXPIRE + randomExpire,
-                                TimeUnit.SECONDS);
-                return R.ok(BeanUtil.copyProperties(pet, PetQueryVO.class));
-            }else {
-                //获取锁失败，说明有其他线程正在重建缓存，等它重建完成
-                //休眠50毫秒，等它重建完成后再试一次
-                for (int i = 0;i < 3;i++){
-                    Thread.sleep(50);
-                    String jsonStr = stringRedisTemplate.opsForValue().get(key);
-                    //redis里是否存在
-                    if (jsonStr != null && !jsonStr.isEmpty()) {
-                        //存在，直接返回结果
-                        Pet bean = JSONUtil.toBean(jsonStr, Pet.class);
-                        PetQueryVO vo = BeanUtil.copyProperties(bean, PetQueryVO.class);
-                        return R.ok(vo);
-                    } else if (Objects.equals(jsonStr, "")) {
-                        //redis里存在空值，说明宠物不存在
-                        return R.error("宠物不存在");
-                    }
-                }
+            if (!tryLock) {
                 return R.error("系统繁忙，请稍后重试");
             }
+            //先查缓存，看看是否重建了
+            p = stringRedisTemplate.opsForValue().get(key);
+            if (p != null && !p.isEmpty()) {
+                //存在，直接返回结果
+                Pet bean = JSONUtil.toBean(p, Pet.class);
+                PetQueryVO vo = BeanUtil.copyProperties(bean, PetQueryVO.class);
+                return R.ok(vo);
+            }
+            //不存在，从数据库查
+            Pet pet = getById(id);
+            if (pet == null) {
+                //数据库也不存在，redis里存空值
+                stringRedisTemplate.opsForValue()
+                        .set(key, "", RedisConstants.EXPIRE.NULL_EXPIRE, TimeUnit.SECONDS);
+                return R.error("宠物不存在");
+            }
+            //存在，写入redis,
+            String jsonStr = JSONUtil.toJsonStr(pet);
+            //0-5分钟的随机过期时间
+            long randomExpire = ThreadLocalRandom.current().nextLong(0, 5 * 60);
+            stringRedisTemplate.opsForValue()
+                    .set(key, jsonStr, RedisConstants.EXPIRE.PET_DETAIL_EXPIRE + randomExpire,
+                            TimeUnit.SECONDS);
+            return R.ok(BeanUtil.copyProperties(pet, PetQueryVO.class));
+
         } catch (Exception e) {
             throw new RuntimeException(e);
         } finally {
-            if (tryLock) {
+            if (tryLock && lock.isHeldByCurrentThread()) {
                 lock.unlock();
             }
         }

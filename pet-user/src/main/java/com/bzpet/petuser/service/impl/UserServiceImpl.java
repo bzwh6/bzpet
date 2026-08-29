@@ -86,13 +86,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         List<User> list = lambdaQuery()
                 .in(User::getId, ids)
                 .list();
-        Map<Long, User> collect = list.stream().collect(Collectors.toMap(User::getId, u -> u));
         List<UserVO> vo = new ArrayList<>(list.size());
         for (User user : list) {
             UserVO userVO = new UserVO();
             Long id = user.getId();
-            String nickname = collect.get(id).getNickname();
-            String avatar = collect.get(id).getAvatar();
+            String nickname = user.getNickname();
+            String avatar = user.getAvatar();
             userVO.setId(id);
             userVO.setNickname(nickname);
             userVO.setAvatar(avatar);

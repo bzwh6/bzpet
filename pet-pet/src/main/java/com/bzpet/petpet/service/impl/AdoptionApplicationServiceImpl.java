@@ -90,6 +90,8 @@ public class AdoptionApplicationServiceImpl extends ServiceImpl<AdoptionApplicat
         NotificationDTO notificationDTO = new NotificationDTO();
         notificationDTO.setPublisherId(pet.getPublisherId());
         notificationDTO.setApplicantId(userId);
+        notificationDTO.setReceiverId(pet.getPublisherId());
+        notificationDTO.setApplicationId(adoptionApplication.getId());
         notificationDTO.setPetId(applyDTO.getPetId());
         notificationDTO.setTitle(applyDTO.getReason());
         notificationDTO.setContent("您有新的领养申请");
@@ -187,6 +189,7 @@ public class AdoptionApplicationServiceImpl extends ServiceImpl<AdoptionApplicat
         //创建消息内容
         ProcessDTO dto = new ProcessDTO();
         dto.setPetId(petId);
+        dto.setApplicationId(applicationId);
         dto.setApplicantId(Collections.singletonList(application.getApplicantId()));
         dto.setPublisherId(application.getPublisherId());
         dto.setIsAccept(isAccept);
@@ -231,6 +234,7 @@ public class AdoptionApplicationServiceImpl extends ServiceImpl<AdoptionApplicat
         for (AdoptionApplication app : otherApps) {
             ProcessDTO rejectDTO = new ProcessDTO();
             rejectDTO.setPetId(dto.getPetId());
+            rejectDTO.setApplicationId(app.getId());
             rejectDTO.setApplicantId(Collections.singletonList(app.getApplicantId()));
             rejectDTO.setPublisherId(dto.getPublisherId());
             rejectDTO.setIsAccept(false);
