@@ -3,6 +3,7 @@ package com.bzpet.petuser.service.impl;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.crypto.digest.BCrypt;
+import com.bzpet.common.constants.RedisConstants;
 import com.bzpet.common.domain.R;
 import com.bzpet.common.exception.BadException;
 import com.bzpet.petjwt.utils.JwtUtil;
@@ -14,12 +15,15 @@ import com.bzpet.petuser.domain.vo.UserVO;
 import com.bzpet.petuser.mapper.UserMapper;
 import com.bzpet.petuser.service.IUserService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -31,8 +35,9 @@ import java.util.stream.Collectors;
  * @since 2026-08-20
  */
 @Service
+@RequiredArgsConstructor
 public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IUserService {
-
+    private final StringRedisTemplate stringRedisTemplate;
     @Override
     public R<String> logIn(LoginFormDTO loginFormDTO) {
         //从数据库里根据用户名查询用户
@@ -49,6 +54,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         Map<String, Object> userMap = new HashMap<>();
         userMap.put("userId", user.getId());
         String token = JwtUtil.genToken(userMap);
+        //将token存入redis
+        String key = RedisConstants.KEY.USER_TOKEN_KEY;
+        stringRedisTemplate.opsForValue()
+                .set(key + token,user.getId().toString()
+                        ,RedisConstants.EXPIRE.USER_TOKEN_EXPIRE, TimeUnit.SECONDS);
         return R.ok(token);
     }
 
@@ -98,5 +108,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
             vo.add(userVO);
         }
         return R.ok(vo);
+    }
+
+    @Override
+    public R<String> logOut(String token) {
+        //从redis里删除token
+        stringRedisTemplate.delete(RedisConstants.KEY.USER_TOKEN_KEY + token);
+        return R.ok("退出登录成功。");
     }
 }

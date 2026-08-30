@@ -37,6 +37,12 @@ public class UserController {
         return userService.logIn(loginFormDTO);
     }
 
+    @PostMapping("/logout")
+    @Operation(summary = "退出登录接口")
+    public R<String> logOut(String token){
+        return userService.logOut(token);
+    }
+
     @PostMapping("/register")
     @Operation(summary = "注册接口")
     public R<String> register(@Valid @RequestBody RegisterDTO registerDTO){

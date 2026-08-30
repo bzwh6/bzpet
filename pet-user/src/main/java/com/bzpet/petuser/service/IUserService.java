@@ -28,4 +28,6 @@ public interface IUserService extends IService<User> {
     R<UserInfoVO> userInfo(Long id);
 
     R<List<UserVO>> userInfoList(List<Long> ids);
+
+    R<String> logOut(String token);
 }
