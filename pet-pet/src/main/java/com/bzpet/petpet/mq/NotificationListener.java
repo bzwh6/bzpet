@@ -24,11 +24,17 @@ import java.io.IOException;
 @Component
 @RequiredArgsConstructor
 public class NotificationListener {
-    private final StringRedisTemplate redisTemplate;
     private final INotificationService notificationService;
 
+    /**
+     * 监听通知队列
+     * @param dto
+     * @param channel
+     * @param deliveryTag
+     * @throws IOException
+     */
     @RabbitListener(bindings = @QueueBinding(
-            value = @Queue(name = "notification.adption.queue", durable = "true",
+            value = @Queue(name = "notification.adoption.queue", durable = "true",
                     arguments = {
                             @Argument(name = "x-dead-letter-exchange", value = MqDeadLetterConfig.NOTIFICATION_DLX),
                             @Argument(name = "x-dead-letter-routing-key", value = MqDeadLetterConfig.NOTIFICATION_DLX_KEY)
@@ -49,7 +55,7 @@ public class NotificationListener {
     }
 
     @RabbitListener(bindings = @QueueBinding(
-            value = @Queue(name = "notification.accept.adption.queue", durable = "true",
+            value = @Queue(name = "notification.accept.adoption.queue", durable = "true",
                     arguments = {
                             @Argument(name = "x-dead-letter-exchange", value = MqDeadLetterConfig.NOTIFICATION_DLX),
                             @Argument(name = "x-dead-letter-routing-key", value = MqDeadLetterConfig.NOTIFICATION_DLX_KEY)
@@ -70,7 +76,7 @@ public class NotificationListener {
     }
 
     @RabbitListener(bindings = @QueueBinding(
-            value = @Queue(name = "notification.reject.adption.queue", durable = "true",
+            value = @Queue(name = "notification.reject.adoption.queue", durable = "true",
                     arguments = {
                             @Argument(name = "x-dead-letter-exchange", value = MqDeadLetterConfig.NOTIFICATION_DLX),
                             @Argument(name = "x-dead-letter-routing-key", value = MqDeadLetterConfig.NOTIFICATION_DLX_KEY)

@@ -108,4 +108,16 @@ public class MessageCompensationServiceImpl extends ServiceImpl<MessageCompensat
             }
         }
     }
+
+    /**
+     * 清理本地补偿表中已发送成功的补偿消息
+     */
+    @Override
+    public void cleanSuccessMessages() {
+        LocalDateTime localDateTime = LocalDateTime.now().minusDays(7);
+        lambdaUpdate()
+                .eq(MessageCompensation::getStatus, 1)
+                .lt(MessageCompensation::getCreateTime, localDateTime)
+                .remove();
+    }
 }

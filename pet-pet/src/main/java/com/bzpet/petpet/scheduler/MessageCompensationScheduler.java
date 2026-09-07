@@ -7,6 +7,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
+
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -20,6 +22,15 @@ public class MessageCompensationScheduler {
             messageCompensationService.retryFailedMessages();
         } catch (Exception e) {
             log.error("补偿消息定时任务执行异常：{}", e.getMessage(), e);
+        }
+    }
+
+    @XxlJob("cleanCompensationMessagesJob")
+    public void cleanCompensationMessages() {
+        try {
+            messageCompensationService.cleanSuccessMessages();
+        } catch (Exception e) {
+            log.error("清理补偿消息定时任务执行异常：{}", e.getMessage(), e);
         }
     }
 }

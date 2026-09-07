@@ -1,7 +1,6 @@
 package com.bzpet.common.autoConfig.mq;
 
-import jakarta.annotation.PostConstruct;
-import jakarta.annotation.Resource;
+
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.ReturnedMessage;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;

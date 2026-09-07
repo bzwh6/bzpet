@@ -35,4 +35,6 @@ public interface INotificationService extends IService<Notification> {
     R<Void> deleteRead();
 
     R<Void> deleteNotification(Long id);
+
+    R<Long> queryUnreadCount();
 }

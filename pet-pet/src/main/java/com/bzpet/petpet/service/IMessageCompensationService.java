@@ -3,6 +3,8 @@ package com.bzpet.petpet.service;
 import com.bzpet.petpet.domain.po.MessageCompensation;
 import com.baomidou.mybatisplus.extension.service.IService;
 
+import java.time.LocalDateTime;
+
 /**
  * <p>
  * MQ消息本地补偿表 服务类
@@ -18,4 +20,6 @@ public interface IMessageCompensationService extends IService<MessageCompensatio
     void sendAndUpdateStatus(Long compensationId);
 
     void retryFailedMessages();
+
+    void cleanSuccessMessages();
 }

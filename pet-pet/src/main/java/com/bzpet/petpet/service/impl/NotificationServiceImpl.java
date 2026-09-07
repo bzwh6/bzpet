@@ -263,4 +263,15 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
         removeById(id);
         return R.ok();
     }
+
+    @Override
+    public R<Long> queryUnreadCount() {
+        //查询当前用户接收的所有未读通知数量
+        Long userId = UserContext.getUserId();
+        Long count = lambdaQuery()
+                .eq(Notification::getReceiverId, userId)
+                .eq(Notification::getIsRead, ReadStatus.UNREAD)
+                .count();
+        return R.ok(count);
+    }
 }

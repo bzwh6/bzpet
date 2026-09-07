@@ -4,6 +4,7 @@ package com.bzpet.petuser.controller;
 import com.bzpet.common.domain.R;
 import com.bzpet.petuser.domain.dto.LoginFormDTO;
 import com.bzpet.petuser.domain.dto.RegisterDTO;
+import com.bzpet.petuser.domain.dto.UserInfoDTO;
 import com.bzpet.petuser.domain.vo.UserInfoVO;
 import com.bzpet.petuser.domain.vo.UserVO;
 import com.bzpet.petuser.service.IUserService;
@@ -59,5 +60,17 @@ public class UserController {
     @Operation(summary = "用户列表接口")
     public R<List<UserVO>> userInfoList(@RequestParam List<Long> ids){
         return userService.userInfoList(ids);
+    }
+
+    @PutMapping("/upadte/info")
+    @Operation(summary = "更新用户基础信息接口")
+    public R<String> updateUserInfo(@RequestBody UserInfoDTO userInfoDTO){
+        return userService.updateUserInfo(userInfoDTO);
+    }
+
+    @PutMapping("/upadte/password")
+    @Operation(summary = "更新用户密码接口")
+    public R<String> updatePassword(@RequestParam String password){
+        return userService.updatePassword(password);
     }
 }

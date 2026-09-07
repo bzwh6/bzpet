@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.List;
 
-@FeignClient(name = "pet-user")
+@FeignClient(name = "user-service")
 public interface UserClient {
     @GetMapping("/user/userInfo/{id}")
     @Operation(summary = "用户信息接口")

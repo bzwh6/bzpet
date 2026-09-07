@@ -40,7 +40,7 @@ public class PetController {
     }
     @Operation(summary="查询宠物详情")
     @GetMapping("/detail/{id}")
-    public R<PetQueryVO> petDetail(@PathVariable Long id) {
+    public R<PetQueryVO> petDetail(@PathVariable Long id) throws InterruptedException {
         return petService.petDetail(id);
     }
 

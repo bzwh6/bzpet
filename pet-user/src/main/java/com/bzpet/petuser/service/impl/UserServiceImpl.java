@@ -6,9 +6,11 @@ import cn.hutool.crypto.digest.BCrypt;
 import com.bzpet.common.constants.RedisConstants;
 import com.bzpet.common.domain.R;
 import com.bzpet.common.exception.BadException;
+import com.bzpet.common.utils.UserContext;
 import com.bzpet.petjwt.utils.JwtUtil;
 import com.bzpet.petuser.domain.dto.LoginFormDTO;
 import com.bzpet.petuser.domain.dto.RegisterDTO;
+import com.bzpet.petuser.domain.dto.UserInfoDTO;
 import com.bzpet.petuser.domain.po.User;
 import com.bzpet.petuser.domain.vo.UserInfoVO;
 import com.bzpet.petuser.domain.vo.UserVO;
@@ -38,6 +40,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IUserService {
     private final StringRedisTemplate stringRedisTemplate;
+
     @Override
     public R<String> logIn(LoginFormDTO loginFormDTO) {
         //从数据库里根据用户名查询用户
@@ -57,8 +60,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         //将token存入redis
         String key = RedisConstants.KEY.USER_TOKEN_KEY;
         stringRedisTemplate.opsForValue()
-                .set(key + token,user.getId().toString()
-                        ,RedisConstants.EXPIRE.USER_TOKEN_EXPIRE, TimeUnit.SECONDS);
+                .set(key + token, user.getId().toString()
+                        , RedisConstants.EXPIRE.USER_TOKEN_EXPIRE, TimeUnit.SECONDS);
         return R.ok(token);
     }
 
@@ -115,5 +118,55 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         //从redis里删除token
         stringRedisTemplate.delete(RedisConstants.KEY.USER_TOKEN_KEY + token);
         return R.ok("退出登录成功。");
+    }
+
+    /**
+     * 更新用户基础信息
+     *
+     * @param userInfoDTO
+     * @return
+     */
+    @Override
+    public R<String> updateUserInfo(UserInfoDTO userInfoDTO) {
+        //获取用户id
+        Long userId = UserContext.getUserId();
+        //根据用户id查询用户
+        User user = getById(userId);
+        if (user == null) {
+            throw new BadException("用户不存在！");
+        }
+        //更新用户信息
+        lambdaUpdate()
+                .eq(User::getId, userId)
+                .set(userInfoDTO.getNickname() != null, User::getNickname, userInfoDTO.getNickname())
+                .set(userInfoDTO.getAvatar() != null, User::getAvatar, userInfoDTO.getAvatar())
+                .update();
+        return R.ok("更新成功。");
+    }
+
+    /**
+     * 更新用户密码
+     *
+     * @param password
+     * @return
+     */
+    @Override
+    public R<String> updatePassword(String password) {
+        //获取用户id
+        Long userId = UserContext.getUserId();
+        //根据用户id查询用户
+        User user = getById(userId);
+        if (user == null) {
+            throw new BadException("用户不存在！");
+        }
+        //校验密码是否正确
+        if (!BCrypt.checkpw(password, user.getPassword())) {
+            throw new BadException("密码错误！");
+        }
+        //更新用户密码
+        String hashpw = BCrypt.hashpw(password);
+        user.setPassword(hashpw);
+        updateById(user);
+        return R.ok("密码更新成功。");
     }
 }
