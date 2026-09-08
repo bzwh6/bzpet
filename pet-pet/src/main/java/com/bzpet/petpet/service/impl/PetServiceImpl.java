@@ -11,6 +11,7 @@ import com.bzpet.common.exception.BadException;
 import com.bzpet.common.utils.UserContext;
 import com.bzpet.petpet.domain.dto.PetDTO;
 import com.bzpet.petpet.domain.po.Pet;
+import com.bzpet.petpet.domain.po.UserLike;
 import com.bzpet.petpet.domain.query.PetQueryDTO;
 import com.bzpet.petpet.domain.vo.PetQueryVO;
 import com.bzpet.petpet.enums.AdoptionStatus;
@@ -18,12 +19,15 @@ import com.bzpet.petpet.enums.ApplicaltionStatus;
 import com.bzpet.petpet.mapper.PetMapper;
 import com.bzpet.petpet.service.IPetService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.bzpet.petpet.service.IUserLikeService;
+import com.bzpet.petpet.service.UserLikeFallbackService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Objects;
@@ -43,9 +47,10 @@ import java.util.stream.Collectors;
 @Slf4j
 @RequiredArgsConstructor
 public class PetServiceImpl extends ServiceImpl<PetMapper, Pet> implements IPetService {
+
     private final StringRedisTemplate stringRedisTemplate;
     private final RedissonClient redissonClient;
-
+    private final UserLikeFallbackService userLikeFallbackService;
 
     @Override
     public R<PageDTO<PetQueryVO>> petList(PetQueryDTO petDTO) {
@@ -182,6 +187,46 @@ public class PetServiceImpl extends ServiceImpl<PetMapper, Pet> implements IPetS
                 .update();
         //删除宠物缓存
         stringRedisTemplate.delete(RedisConstants.KEY.PET_DETAIL_KEY + id);
+    }
+
+
+    @Override
+    public void likePet(Long id) {
+        //查询宠物是否存在
+        Pet pet = getById(id);
+        if (pet == null) {
+            throw new BadException("宠物不存在");
+        }
+        //获取用户id
+        Long userId = UserContext.getUserId();
+        try {
+            //用redis的set集合，记录点赞的用户id
+            String likeKey = RedisConstants.KEY.LIKE_PET_KEY + id;
+            Long result = stringRedisTemplate.opsForSet().add(likeKey, userId.toString());
+            String countKey = RedisConstants.KEY.LIKE_PET_COUNT_KEY;
+            if (result != null && result == 0) {
+                //删除点赞的用户id缓存
+                stringRedisTemplate.opsForSet().remove(likeKey, userId.toString());
+                //如果用户已经点赞说明是取消点赞,点赞总数减1
+                Double v = stringRedisTemplate.opsForZSet().incrementScore(countKey, id.toString(), -1);
+                //如果点赞数为负数，
+                if (v != null && v < 0) {
+                    //点赞数不能为负数,把点赞总数设为0
+                    stringRedisTemplate.opsForZSet().add(countKey, id.toString(), 0);
+                }
+            } else {
+                //没有就是点赞
+                //用zset记录点赞数,点赞总数加1
+                stringRedisTemplate.opsForZSet().incrementScore(countKey, id.toString(), 1);
+            }
+        } catch (Exception e) {
+            try {
+                userLikeFallbackService.likeFallback(userId, id);
+            } catch (Exception ex) {
+                log.error("系统繁忙，请稍后再试", ex);
+                throw new RuntimeException(ex);
+            }
+        }
     }
 
     private void checkPet(Pet pet, Long userId) {

@@ -60,4 +60,11 @@ public class PetController {
         petService.deletePet(id);
     }
 
+    @Operation(summary = "点赞宠物接口")
+    @PostMapping("/like/{id}")
+    public void likePet(@PathVariable Long id) {
+        petService.likePet(id);
+    }
+
+
 }

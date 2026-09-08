@@ -29,4 +29,6 @@ public interface IPetService extends IService<Pet> {
     void deletePet(Long id);
 
     void updatePet(Long id, PetDTO petDTO);
+
+    void likePet(Long id);
 }

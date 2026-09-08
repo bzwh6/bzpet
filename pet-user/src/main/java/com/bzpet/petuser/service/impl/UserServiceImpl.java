@@ -120,12 +120,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         return R.ok("退出登录成功。");
     }
 
-    /**
-     * 更新用户基础信息
-     *
-     * @param userInfoDTO
-     * @return
-     */
+
     @Override
     public R<String> updateUserInfo(UserInfoDTO userInfoDTO) {
         //获取用户id
@@ -135,21 +130,36 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         if (user == null) {
             throw new BadException("用户不存在！");
         }
+        //校验手机号是否已存在
+        if (lambdaQuery()
+                .eq(User::getPhone, userInfoDTO.getPhone())
+                .count() > 0) {
+            throw new BadException("手机号已存在！");
+        }
+        //校验邮箱是否已存在
+        if (lambdaQuery()
+                .eq(User::getEmail, userInfoDTO.getEmail())
+                .count() > 0) {
+            throw new BadException("邮箱已存在！");
+        }
+        //校验用户名是否已存在
+        if (lambdaQuery()
+                .eq(User::getUsername, userInfoDTO.getUsername())
+                .count() > 0) {
+            throw new BadException("用户名已存在！");
+        }
         //更新用户信息
         lambdaUpdate()
                 .eq(User::getId, userId)
                 .set(userInfoDTO.getNickname() != null, User::getNickname, userInfoDTO.getNickname())
-                .set(userInfoDTO.getAvatar() != null, User::getAvatar, userInfoDTO.getAvatar())
+                .set(userInfoDTO.getEmail() != null, User::getEmail, userInfoDTO.getEmail())
+                .set(userInfoDTO.getPhone() != null, User::getPhone, userInfoDTO.getPhone())
+                .set(userInfoDTO.getUsername() != null, User::getUsername, userInfoDTO.getUsername())
                 .update();
         return R.ok("更新成功。");
     }
 
-    /**
-     * 更新用户密码
-     *
-     * @param password
-     * @return
-     */
+
     @Override
     public R<String> updatePassword(String password) {
         //获取用户id

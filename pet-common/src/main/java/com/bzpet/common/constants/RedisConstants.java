@@ -8,6 +8,10 @@ public interface RedisConstants {
         String USER_TOKEN_KEY = "user:token:";
         // 消息的幂等id
         String MESSAGE_DONE_ID = "message:done:id:";
+        // 点赞宠物的缓存key,记录点赞的用户id
+        String LIKE_PET_KEY = "like:pet:";
+        // 点赞宠物的缓存key,记录点赞数
+        String LIKE_PET_COUNT_KEY = "like:pet:count";
     }
 
     interface EXPIRE {
