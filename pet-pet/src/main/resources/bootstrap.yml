@@ -20,6 +20,8 @@ spring:
             refresh: true
           - data-id: shared-xxljob.yaml # 共享xxljob配置
             refresh: true
+          - data-id: shared-sentinel.yaml # 共享sentinel配置
+            refresh: true
 
 bz:
   swagger:

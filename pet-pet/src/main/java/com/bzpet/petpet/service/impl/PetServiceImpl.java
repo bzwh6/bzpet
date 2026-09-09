@@ -3,6 +3,8 @@ package com.bzpet.petpet.service.impl;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.json.JSONUtil;
+import com.alibaba.csp.sentinel.annotation.SentinelResource;
+import com.alibaba.csp.sentinel.slots.block.BlockException;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.bzpet.common.constants.RedisConstants;
 import com.bzpet.common.domain.R;
@@ -191,12 +193,8 @@ public class PetServiceImpl extends ServiceImpl<PetMapper, Pet> implements IPetS
 
 
     @Override
+    @SentinelResource(value = "likePet", blockHandler = "likeFallback")
     public void likePet(Long id) {
-        //查询宠物是否存在
-        Pet pet = getById(id);
-        if (pet == null) {
-            throw new BadException("宠物不存在");
-        }
         //获取用户id
         Long userId = UserContext.getUserId();
         try {
@@ -227,6 +225,11 @@ public class PetServiceImpl extends ServiceImpl<PetMapper, Pet> implements IPetS
                 throw new RuntimeException(ex);
             }
         }
+    }
+
+    public void likeFallback(Long id, BlockException e) {
+        log.warn("点赞宠物失败，id：{}", id);
+        throw new BadException("系统繁忙，请稍后再试！");
     }
 
     private void checkPet(Pet pet, Long userId) {
