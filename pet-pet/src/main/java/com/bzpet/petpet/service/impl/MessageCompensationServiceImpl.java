@@ -29,7 +29,7 @@ public class MessageCompensationServiceImpl extends ServiceImpl<MessageCompensat
 
     private final RabbitTemplate rabbitTemplate;
 
-    private static final int MAX_RETRY_COUNT = 5;
+    private static final int MAX_RETRY_COUNT = 3;
 
     @Override
     public Long savePendingMessage(MessageCompensation compensation) {
@@ -72,6 +72,15 @@ public class MessageCompensationServiceImpl extends ServiceImpl<MessageCompensat
 
     @Override
     public void retryFailedMessages() {
+        //1. 先把重试次数已用尽、仍未发送成功的消息置为死亡(3)，等待人工介入，避免无限重试
+        lambdaUpdate()
+                .in(MessageCompensation::getStatus, 0, 2)
+                .ge(MessageCompensation::getRetryCount, MAX_RETRY_COUNT)
+                .set(MessageCompensation::getStatus, 3)
+                .set(MessageCompensation::getUpdateTime, LocalDateTime.now())
+                .update();
+
+        //2. 取出还有重试次数的消息
         List<MessageCompensation> list = lambdaQuery()
                 .in(MessageCompensation::getStatus, 0, 2)
                 .lt(MessageCompensation::getRetryCount, MAX_RETRY_COUNT)
@@ -81,6 +90,8 @@ public class MessageCompensationServiceImpl extends ServiceImpl<MessageCompensat
         }
         log.info("开始重试补偿消息，共{}条", list.size());
         for (MessageCompensation compensation : list) {
+            //本次重发即一次失败重试，失败次数 +1
+            int newRetryCount = compensation.getRetryCount() + 1;
             try {
                 rabbitTemplate.convertAndSend(
                         compensation.getExchangeName(),
@@ -91,15 +102,14 @@ public class MessageCompensationServiceImpl extends ServiceImpl<MessageCompensat
                 lambdaUpdate()
                         .eq(MessageCompensation::getId, compensation.getId())
                         .set(MessageCompensation::getStatus, 1)
+                        .set(MessageCompensation::getRetryCount, newRetryCount)
                         .set(MessageCompensation::getUpdateTime, LocalDateTime.now())
                         .update();
-                log.info("补偿消息{}重试发送成功", compensation.getMessageId());
+                log.info("补偿消息{}重试发送成功（第{}次尝试）", compensation.getMessageId(), newRetryCount);
             } catch (Exception e) {
-                int newRetryCount = compensation.getRetryCount() + 1;
-                int newStatus = newRetryCount >= MAX_RETRY_COUNT ? 3 : 2;
                 lambdaUpdate()
                         .eq(MessageCompensation::getId, compensation.getId())
-                        .set(MessageCompensation::getStatus, newStatus)
+                        .set(MessageCompensation::getStatus, 2)
                         .set(MessageCompensation::getRetryCount, newRetryCount)
                         .set(MessageCompensation::getLastErrorMsg, e.getMessage())
                         .set(MessageCompensation::getUpdateTime, LocalDateTime.now())
