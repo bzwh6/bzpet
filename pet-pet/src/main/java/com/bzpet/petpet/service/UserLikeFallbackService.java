@@ -32,7 +32,7 @@ public class UserLikeFallbackService {
             }
             petMapper.update(null, new LambdaUpdateWrapper<Pet>()
                     .eq(Pet::getId, id)
-                    .setSql("like_count = like_count + 1")
+                    .setSql("likes_count = likes_count + 1")
             );
         } else {
             //有就是取消点赞,点赞总数减1
@@ -40,7 +40,7 @@ public class UserLikeFallbackService {
             userLikeService.removeById(userLike.getId());
             petMapper.update(null, new LambdaUpdateWrapper<Pet>()
                     .eq(Pet::getId, id)
-                    .setSql("like_count = GREATEST(0, like_count - 1)")
+                    .setSql("likes_count = GREATEST(0, likes_count - 1)")
             );
         }
     }

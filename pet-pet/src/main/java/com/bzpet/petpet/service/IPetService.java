@@ -31,4 +31,6 @@ public interface IPetService extends IService<Pet> {
     void updatePet(Long id, PetDTO petDTO);
 
     void likePet(Long id);
+
+    void saveLikeCount();
 }

@@ -28,11 +28,19 @@ import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -53,6 +61,8 @@ public class PetServiceImpl extends ServiceImpl<PetMapper, Pet> implements IPetS
     private final StringRedisTemplate stringRedisTemplate;
     private final RedissonClient redissonClient;
     private final UserLikeFallbackService userLikeFallbackService;
+    private final RedisScript<Long> likePetScript;
+    private final IUserLikeService userLikeService;
 
     @Override
     public R<PageDTO<PetQueryVO>> petList(PetQueryDTO petDTO) {
@@ -193,30 +203,21 @@ public class PetServiceImpl extends ServiceImpl<PetMapper, Pet> implements IPetS
 
 
     @Override
-    @SentinelResource(value = "likePet", blockHandler = "likeFallback")
+    @SentinelResource(value = "likePetResource", blockHandler = "likeFallback")
     public void likePet(Long id) {
         //获取用户id
         Long userId = UserContext.getUserId();
         try {
             //用redis的set集合，记录点赞的用户id
             String likeKey = RedisConstants.KEY.LIKE_PET_KEY + id;
-            Long result = stringRedisTemplate.opsForSet().add(likeKey, userId.toString());
             String countKey = RedisConstants.KEY.LIKE_PET_COUNT_KEY;
-            if (result != null && result == 0) {
-                //删除点赞的用户id缓存
-                stringRedisTemplate.opsForSet().remove(likeKey, userId.toString());
-                //如果用户已经点赞说明是取消点赞,点赞总数减1
-                Double v = stringRedisTemplate.opsForZSet().incrementScore(countKey, id.toString(), -1);
-                //如果点赞数为负数，
-                if (v != null && v < 0) {
-                    //点赞数不能为负数,把点赞总数设为0
-                    stringRedisTemplate.opsForZSet().add(countKey, id.toString(), 0);
-                }
-            } else {
-                //没有就是点赞
-                //用zset记录点赞数,点赞总数加1
-                stringRedisTemplate.opsForZSet().incrementScore(countKey, id.toString(), 1);
-            }
+            List<String> list = Arrays.asList(likeKey, countKey, RedisConstants.KEY.LIKE_DIRTY_PETS_KEY);
+            Long result = stringRedisTemplate.execute(
+                    likePetScript,
+                    list,
+                    userId.toString(),
+                    id.toString()
+            );
         } catch (Exception e) {
             try {
                 userLikeFallbackService.likeFallback(userId, id);
@@ -225,6 +226,81 @@ public class PetServiceImpl extends ServiceImpl<PetMapper, Pet> implements IPetS
                 throw new RuntimeException(ex);
             }
         }
+    }
+
+    @Override
+    public void saveLikeCount() {
+        //取出待同步的宠物id（点赞/取消时由 Lua 脚本标记进 dirty 集合）
+        Set<String> dirtyPets = stringRedisTemplate.opsForSet()
+                .members(RedisConstants.KEY.LIKE_DIRTY_PETS_KEY);
+        if (CollUtil.isEmpty(dirtyPets)) {
+            return;
+        }
+        List<Long> petIds = dirtyPets.stream().map(Long::valueOf).collect(Collectors.toList());
+        log.info("开始同步点赞数据，待同步宠物数：{}", petIds.size());
+
+        //1. 从 Redis 取每个宠物的点赞用户集合（key 不存在视为空集，即被取消到 0 赞）
+        Map<Long, Set<Long>> redisLikeMap = new HashMap<>(petIds.size());
+        for (Long petId : petIds) {
+            Set<String> users = stringRedisTemplate.opsForSet()
+                    .members(RedisConstants.KEY.LIKE_PET_KEY + petId);
+            redisLikeMap.put(petId, users == null ? Collections.<Long>emptySet()
+                    : users.stream().map(Long::valueOf).collect(Collectors.toSet()));
+        }
+
+        //2. 批量查出这些宠物在 DB 的点赞记录（IN 分批，避免单条 SQL 过长）
+        List<UserLike> dbLikes = new ArrayList<>();
+        for (List<Long> batch : CollUtil.split(petIds, 500)) {
+            dbLikes.addAll(userLikeService.lambdaQuery()
+                    .in(UserLike::getPetId, batch)
+                    .list());
+        }
+        Map<Long, List<UserLike>> dbLikesByPet = dbLikes.stream()
+                .collect(Collectors.groupingBy(UserLike::getPetId));
+
+        //3. 在内存中算出差异，收集成批量操作
+        List<UserLike> toInsert = new ArrayList<>();
+        List<Long> toDeleteIds = new ArrayList<>();
+        List<Pet> toUpdateCount = new ArrayList<>(petIds.size());
+        for (Long petId : petIds) {
+            Set<Long> redisUsers = redisLikeMap.get(petId);
+            List<UserLike> petDbLikes = dbLikesByPet.getOrDefault(petId, Collections.<UserLike>emptyList());
+            Set<Long> dbUsers = petDbLikes.stream().map(UserLike::getUserId).collect(Collectors.toSet());
+
+            //Redis 有、DB 无 → 新增（新点赞）
+            for (Long userId : redisUsers) {
+                if (!dbUsers.contains(userId)) {
+                    toInsert.add(new UserLike()
+                            .setUserId(userId)
+                            .setPetId(petId)
+                            .setCreateTime(LocalDateTime.now()));
+                }
+            }
+            //DB 有、Redis 无 → 删除（取消点赞）
+            for (UserLike dbLike : petDbLikes) {
+                if (!redisUsers.contains(dbLike.getUserId())) {
+                    toDeleteIds.add(dbLike.getId());
+                }
+            }
+            //点赞总数以 Redis 集合大小为准覆盖
+            toUpdateCount.add(new Pet().setId(petId).setLikesCount(redisUsers.size()));
+        }
+
+        //4. 批量落库
+        if (CollUtil.isNotEmpty(toInsert)) {
+            userLikeService.saveBatch(toInsert);
+        }
+        if (CollUtil.isNotEmpty(toDeleteIds)) {
+            userLikeService.removeByIds(toDeleteIds);
+        }
+        if (CollUtil.isNotEmpty(toUpdateCount)) {
+            updateBatchById(toUpdateCount);
+        }
+
+        //5. 清除脏标记
+        stringRedisTemplate.opsForSet().remove(RedisConstants.KEY.LIKE_DIRTY_PETS_KEY,
+                dirtyPets.toArray(new String[0]));
+        log.info("点赞数据同步完成，新增{}条，删除{}条", toInsert.size(), toDeleteIds.size());
     }
 
     public void likeFallback(Long id, BlockException e) {
