@@ -62,13 +62,13 @@ public class UserController {
         return userService.userInfoList(ids);
     }
 
-    @PutMapping("/upadte/info")
+    @PutMapping("/update/info")
     @Operation(summary = "更新用户基础信息接口")
     public R<String> updateUserInfo(@RequestBody UserInfoDTO userInfoDTO){
         return userService.updateUserInfo(userInfoDTO);
     }
 
-    @PutMapping("/upadte/password")
+    @PutMapping("/update/password")
     @Operation(summary = "更新用户密码接口")
     public R<String> updatePassword(@RequestParam String password){
         return userService.updatePassword(password);
