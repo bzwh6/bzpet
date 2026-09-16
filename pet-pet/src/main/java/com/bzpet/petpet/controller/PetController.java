@@ -66,5 +66,11 @@ public class PetController {
         petService.likePet(id);
     }
 
+    @Operation(summary = "查询当前用户是否已点赞")
+    @GetMapping("/like/status/{id}")
+    public R<Boolean> isLiked(@PathVariable Long id) {
+        return R.ok(petService.isLiked(id));
+    }
+
 
 }

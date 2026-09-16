@@ -10,6 +10,9 @@ import java.time.LocalDateTime;
 
 @Data
 public class PetQueryVO {
+    @Schema(description="主键ID")
+    private Long id;
+
     @Schema(description="宠物昵称")
     private String petName;
 

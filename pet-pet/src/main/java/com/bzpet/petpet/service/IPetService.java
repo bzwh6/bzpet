@@ -32,5 +32,10 @@ public interface IPetService extends IService<Pet> {
 
     void likePet(Long id);
 
+    /**
+     * 当前用户是否已点赞该宠物
+     */
+    boolean isLiked(Long petId);
+
     void saveLikeCount();
 }

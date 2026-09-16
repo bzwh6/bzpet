@@ -13,4 +13,8 @@ spring:
         - id: pet-service
           uri: lb://pet-service # 去Nacos里找宠物服务
           predicates:
-            - Path=/pets/** # 所有以 /pet 开头的请求，都转发给宠物服务
+            - Path=/pets/** # 所有以 /pets 开头的请求，都转发给宠物服务
+        - id: pet-notification
+          uri: lb://pet-service # 通知接口也在宠物服务里
+          predicates:
+            - Path=/notification/** # 所有以 /notification 开头的请求，都转发给宠物服务

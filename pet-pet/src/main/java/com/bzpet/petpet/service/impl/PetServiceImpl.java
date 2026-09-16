@@ -94,7 +94,9 @@ public class PetServiceImpl extends ServiceImpl<PetMapper, Pet> implements IPetS
         List<PetQueryVO> voList = records.stream()
                 .map(pet -> BeanUtil.copyProperties(pet, PetQueryVO.class))
                 .collect(Collectors.toList());
-        // 6. 封装分页结果
+        // 6. 用 Redis 实时点赞数覆盖（DB 的 likes_count 只在定时对账时更新）
+        fillLikesCount(voList);
+        // 7. 封装分页结果
         result.setList(voList);
         return R.ok(result);
     }
@@ -108,8 +110,7 @@ public class PetServiceImpl extends ServiceImpl<PetMapper, Pet> implements IPetS
         if (p != null && !p.isEmpty()) {
             //存在，直接返回结果
             Pet bean = JSONUtil.toBean(p, Pet.class);
-            PetQueryVO vo = BeanUtil.copyProperties(bean, PetQueryVO.class);
-            return R.ok(vo);
+            return R.ok(toPetVO(bean));
         } else if (Objects.equals(p, "")) {
             //redis里存在空值，说明宠物不存在
             return R.error("宠物不存在");
@@ -127,8 +128,7 @@ public class PetServiceImpl extends ServiceImpl<PetMapper, Pet> implements IPetS
             if (p != null && !p.isEmpty()) {
                 //存在，直接返回结果
                 Pet bean = JSONUtil.toBean(p, Pet.class);
-                PetQueryVO vo = BeanUtil.copyProperties(bean, PetQueryVO.class);
-                return R.ok(vo);
+                return R.ok(toPetVO(bean));
             }
             //不存在，从数据库查
             Pet pet = getById(id);
@@ -145,13 +145,51 @@ public class PetServiceImpl extends ServiceImpl<PetMapper, Pet> implements IPetS
             stringRedisTemplate.opsForValue()
                     .set(key, jsonStr, RedisConstants.EXPIRE.PET_DETAIL_EXPIRE + randomExpire,
                             TimeUnit.SECONDS);
-            return R.ok(BeanUtil.copyProperties(pet, PetQueryVO.class));
+            return R.ok(toPetVO(pet));
 
         } catch (Exception e) {
             throw new RuntimeException(e);
         } finally {
             if (tryLock && lock.isHeldByCurrentThread()) {
                 lock.unlock();
+            }
+        }
+    }
+
+    /** 单条：用 Redis 中的实时点赞数覆盖 VO */
+    private PetQueryVO toPetVO(Pet pet) {
+        PetQueryVO vo = BeanUtil.copyProperties(pet, PetQueryVO.class);
+        if (vo.getId() != null) {
+            Double score = stringRedisTemplate.opsForZSet()
+                    .score(RedisConstants.KEY.LIKE_PET_COUNT_KEY, vo.getId().toString());
+            if (score != null) {
+                vo.setLikesCount(score.intValue());
+            }
+        }
+        return vo;
+    }
+
+    /** 批量：用 Redis 中的实时点赞数覆盖 VO（DB 的 likes_count 只在定时对账时更新） */
+    private void fillLikesCount(List<PetQueryVO> voList) {
+        if (CollUtil.isEmpty(voList)) {
+            return;
+        }
+        List<PetQueryVO> valid = voList.stream()
+                .filter(vo -> vo.getId() != null)
+                .collect(Collectors.toList());
+        if (valid.isEmpty()) {
+            return;
+        }
+        Object[] members = valid.stream().map(vo -> vo.getId().toString()).toArray();
+        List<Double> scores = stringRedisTemplate.opsForZSet()
+                .score(RedisConstants.KEY.LIKE_PET_COUNT_KEY, members);
+        if (scores == null) {
+            return;
+        }
+        for (int i = 0; i < valid.size() && i < scores.size(); i++) {
+            Double score = scores.get(i);
+            if (score != null) {
+                valid.get(i).setLikesCount(score.intValue());
             }
         }
     }
@@ -226,6 +264,16 @@ public class PetServiceImpl extends ServiceImpl<PetMapper, Pet> implements IPetS
                 throw new RuntimeException(ex);
             }
         }
+    }
+
+    @Override
+    public boolean isLiked(Long petId) {
+        Long userId = UserContext.getUserId();
+        if (userId == null) {
+            return false;
+        }
+        return Boolean.TRUE.equals(stringRedisTemplate.opsForSet()
+                .isMember(RedisConstants.KEY.LIKE_PET_KEY + petId, userId.toString()));
     }
 
     @Override

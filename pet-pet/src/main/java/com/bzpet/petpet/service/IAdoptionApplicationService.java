@@ -24,5 +24,7 @@ public interface IAdoptionApplicationService extends IService<AdoptionApplicatio
 
     R<PageDTO<AdoptionApplyVO>> myAdoptionList(AdoptionApplyQueryDTO queryDTO);
 
+    R<PageDTO<AdoptionApplyVO>> receivedList(AdoptionApplyQueryDTO queryDTO);
+
     R<String> processApplication(@Valid ProcessApplicationDTO processDTO);
 }

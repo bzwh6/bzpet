@@ -41,6 +41,12 @@ public class AdoptionApplyVO  {
     @Schema(description = "发布人头像")
     private String publisherAvatar;
 
+    @Schema(description = "申请人人称")
+    private String applicantNickname;
+
+    @Schema(description = "申请人头像")
+    private String applicantAvatar;
+
     @Schema(description="领养理由")
     private String reason;
 

@@ -5,6 +5,7 @@ import cn.hutool.core.collection.CollUtil;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.bzpet.common.constants.MqConstants;
+import com.bzpet.common.constants.RedisConstants;
 import com.bzpet.common.domain.R;
 import com.bzpet.common.domain.dto.PageDTO;
 import com.bzpet.common.enums.NotificationType;
@@ -31,6 +32,7 @@ import com.bzpet.petpet.service.IPetService;
 import com.bzpet.petpet.service.IMessageCompensationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -55,6 +57,7 @@ public class AdoptionApplicationServiceImpl extends ServiceImpl<AdoptionApplicat
     private final RabbitTemplate rabbitTemplate;
     private final IMessageCompensationService messageCompensationService;
     private final UserClient userClient;
+    private final StringRedisTemplate stringRedisTemplate;
 
     @Override
     public R<String> applyAdoption(AdoptionApplyDTO applyDTO) {
@@ -140,6 +143,44 @@ public class AdoptionApplicationServiceImpl extends ServiceImpl<AdoptionApplicat
     }
 
     @Override
+    public R<PageDTO<AdoptionApplyVO>> receivedList(AdoptionApplyQueryDTO queryDTO) {
+        //获取我的id，发布人
+        Long userId = UserContext.getUserId();
+        //分页查询我收到的领养申请（我发布的宠物被别人申请）
+        Page<AdoptionApplication> page = lambdaQuery()
+                .eq(AdoptionApplication::getPublisherId, userId)
+                .eq(queryDTO.getStatus() != null, AdoptionApplication::getStatus, queryDTO.getStatus())
+                .orderByDesc(AdoptionApplication::getCreateTime)
+                .page(new Page<>(queryDTO.getPageNo(), queryDTO.getPageSize()));
+        List<AdoptionApplication> records = page.getRecords();
+        PageDTO<AdoptionApplyVO> pageDTO = new PageDTO<>();
+        pageDTO.setTotal(page.getTotal());
+        pageDTO.setPages(page.getPages());
+        if (CollUtil.isEmpty(records)) {
+            return R.ok(pageDTO);
+        }
+        //查询申请人昵称、头像信息
+        List<Long> applicantIds = records.stream()
+                .map(AdoptionApplication::getApplicantId).collect(Collectors.toList());
+        List<UserVO> userVOS = userClient.userInfoList(applicantIds).getData();
+        Map<Long, UserVO> collect = CollUtil.isEmpty(userVOS) ? Collections.emptyMap()
+                : userVOS.stream().collect(Collectors.toMap(UserVO::getId, u -> u));
+        //转换为VO
+        List<AdoptionApplyVO> voList = new ArrayList<>(records.size());
+        for (AdoptionApplication record : records) {
+            AdoptionApplyVO vo = BeanUtil.copyProperties(record, AdoptionApplyVO.class);
+            UserVO userVO = collect.get(record.getApplicantId());
+            if (userVO != null) {
+                vo.setApplicantNickname(userVO.getNickname());
+                vo.setApplicantAvatar(userVO.getAvatar());
+            }
+            voList.add(vo);
+        }
+        pageDTO.setList(voList);
+        return R.ok(pageDTO);
+    }
+
+    @Override
     @Transactional
     public R<String> processApplication(ProcessApplicationDTO processDTO) {
         //查询领养申请
@@ -211,6 +252,8 @@ public class AdoptionApplicationServiceImpl extends ServiceImpl<AdoptionApplicat
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
+                // 清除宠物详情缓存，保证前端能读到最新的领养状态
+                stringRedisTemplate.delete(RedisConstants.KEY.PET_DETAIL_KEY + petId);
                 if (isAccept) {
                     handleAccept(dto, compensationId);
                 } else {

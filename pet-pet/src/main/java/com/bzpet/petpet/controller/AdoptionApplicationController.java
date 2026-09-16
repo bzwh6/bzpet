@@ -42,6 +42,12 @@ public class AdoptionApplicationController {
     public R<PageDTO<AdoptionApplyVO>> myAdoptionList(@ParameterObject AdoptionApplyQueryDTO pageDTO) {
         return applicationService.myAdoptionList(pageDTO);
     }
+
+    @GetMapping("/received/list")
+    @Operation(summary = "分页查询我收到的领养申请列表（发布人）")
+    public R<PageDTO<AdoptionApplyVO>> receivedList(@ParameterObject AdoptionApplyQueryDTO pageDTO) {
+        return applicationService.receivedList(pageDTO);
+    }
     @PostMapping("/process")
     @Operation(summary = "处理领养申请")
     public R<String> processApplication(@Valid @RequestBody ProcessApplicationDTO processDTO) {
