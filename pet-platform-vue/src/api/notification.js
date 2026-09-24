@@ -14,3 +14,6 @@ export const clearRead = () => request.delete('/notification/read/clear')
 
 // 删除单条通知
 export const deleteNotification = (id) => request.delete(`/notification/delete/${id}`)
+
+// 我的未读通知数量（顶部菜单红点）
+export const getUnreadCount = () => request.get('/notification/unread/count')

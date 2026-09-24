@@ -1,13 +1,22 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from './store/user'
+import { useNotificationStore } from './store/notification'
 import { logout } from './api/user'
 
 const router = useRouter()
 const route = useRoute()
 const userStore = useUserStore()
+const notificationStore = useNotificationStore()
 const isLogin = computed(() => !!userStore.token)
+
+// 路由切换时刷新未读数（含登录后首次进入）
+watch(
+  () => route.fullPath,
+  () => notificationStore.refresh(),
+  { immediate: true }
+)
 
 async function handleLogout() {
   try {
@@ -16,6 +25,7 @@ async function handleLogout() {
     // 忽略登出接口异常，本地清除即可
   }
   userStore.clear()
+  notificationStore.reset()
   router.push('/login')
 }
 </script>
@@ -29,7 +39,11 @@ async function handleLogout() {
         <el-menu-item index="/publish">发布宠物</el-menu-item>
         <el-menu-item index="/my-applications">我的领养</el-menu-item>
         <el-menu-item index="/received-applications">收到的申请</el-menu-item>
-        <el-menu-item index="/notifications">通知</el-menu-item>
+        <el-menu-item index="/notifications">
+          <el-badge :value="notificationStore.unread" :max="99" :hidden="notificationStore.unread === 0">
+            通知
+          </el-badge>
+        </el-menu-item>
         <el-menu-item index="/profile">个人中心</el-menu-item>
       </el-menu>
       <div class="actions">

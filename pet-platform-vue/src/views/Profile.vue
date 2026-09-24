@@ -6,7 +6,7 @@ import { useUserStore } from '../store/user'
 
 const userStore = useUserStore()
 const info = ref({ nickname: '', avatar: '' })
-const password = ref('')
+const pwdForm = ref({ oldPassword: '', newPassword: '' })
 
 async function load() {
   if (!userStore.userId) return
@@ -20,13 +20,13 @@ async function saveInfo() {
 }
 
 async function savePassword() {
-  if (!password.value) {
-    ElMessage.warning('请输入密码')
+  if (!pwdForm.value.oldPassword || !pwdForm.value.newPassword) {
+    ElMessage.warning('请输入旧密码和新密码')
     return
   }
-  await updatePassword(password.value)
+  await updatePassword(pwdForm.value)
   ElMessage.success('密码更新成功')
-  password.value = ''
+  pwdForm.value = { oldPassword: '', newPassword: '' }
 }
 
 onMounted(load)
@@ -49,8 +49,11 @@ onMounted(load)
         <el-button type="primary" @click="saveInfo">保存资料</el-button>
       </el-form-item>
       <el-divider>修改密码</el-divider>
-      <el-form-item label="密码">
-        <el-input v-model="password" type="password" />
+      <el-form-item label="旧密码">
+        <el-input v-model="pwdForm.oldPassword" type="password" show-password />
+      </el-form-item>
+      <el-form-item label="新密码">
+        <el-input v-model="pwdForm.newPassword" type="password" show-password />
       </el-form-item>
       <el-form-item>
         <el-button type="warning" @click="savePassword">修改密码</el-button>

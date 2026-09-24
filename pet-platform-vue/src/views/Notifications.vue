@@ -8,7 +8,9 @@ import {
   clearRead,
   deleteNotification
 } from '../api/notification'
+import { useNotificationStore } from '../store/notification'
 
+const notificationStore = useNotificationStore()
 const loading = ref(false)
 const list = ref([])
 const total = ref(0)
@@ -29,24 +31,30 @@ async function open(row) {
   const detail = await getNotificationDetail(row.id)
   ElMessage.info(detail.content || detail.title || '通知')
   load()
+  // 查看即标记已读，同步顶部红点
+  notificationStore.refresh()
 }
 
 async function readAll() {
   await markAllRead()
   ElMessage.success('已全部标记已读')
   load()
+  notificationStore.refresh()
 }
 
 async function clear() {
   await clearRead()
   ElMessage.success('已清空已读通知')
   load()
+  notificationStore.refresh()
 }
 
 async function remove(row) {
   await deleteNotification(row.id)
   ElMessage.success('删除成功')
   load()
+  // 删除未读通知会影响未读数，同步顶部红点
+  notificationStore.refresh()
 }
 
 onMounted(load)

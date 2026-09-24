@@ -45,7 +45,8 @@ src/
 ├── views/          # 页面
 │   ├── Login.vue / Register.vue
 │   ├── PetList.vue / PetDetail.vue / PetPublish.vue
-│   ├── MyApplications.vue / Notifications.vue / Profile.vue
+│   ├── MyApplications.vue / ReceivedApplications.vue
+│   ├── Notifications.vue / Profile.vue
 ├── App.vue         # 顶部导航布局
 └── main.js
 ```
@@ -58,21 +59,20 @@ src/
 | POST /user/register | 注册 |
 | POST /user/logout?token= | 退出登录 |
 | GET /user/userInfo/{id} | 用户信息 |
-| PUT /upadte/info | 更新资料（后端拼写为 `upadte`） |
-| PUT /upadte/password?password= | 修改密码 |
+| PUT /user/update/info | 更新资料 |
+| PUT /user/update/password | 修改密码（body: oldPassword / newPassword） |
 | GET /pets/list | 宠物分页列表 |
 | GET /pets/detail/{id} | 宠物详情 |
 | POST /pets/add | 发布宠物 |
 | POST /pets/like/{id} | 点赞 / 取消 |
+| GET /pets/like/status/{id} | 查询当前用户是否已点赞 |
 | POST /pets/adoption/apply | 提交领养申请 |
 | GET /pets/adoption/my/list | 我的领养申请 |
+| GET /pets/adoption/received/list | 我收到的领养申请（发布者审核） |
+| POST /pets/adoption/process | 处理领养申请（同意 / 拒绝） |
 | GET /notification/list | 我的通知分页 |
 | GET /notification/detail/{id} | 通知详情（标记已读） |
+| GET /notification/unread/count | 未读通知数（顶部菜单红点） |
 | POST /notification/read | 全部已读 |
 | DELETE /notification/read/clear | 清空已读 |
 | DELETE /notification/delete/{id} | 删除通知 |
-
-## 待后端补齐
-
-- **「我收到的领养申请」接口**：目前后端只有「我提交的申请」，发布者无法在前端看到待处理的申请，因此前端暂无发布者审核页。
-- **`/upadte` 拼写**：后端若修正为 `/update`，请同步修改 `src/api/user.js`。

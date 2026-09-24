@@ -16,9 +16,7 @@ export const getUserInfo = (id) => request.get(`/user/userInfo/${id}`)
 export const getUserList = (ids) => request.get('/user/list', { params: { ids: ids.join(',') } })
 
 // 更新用户基础信息 { nickname, avatar }
-// 注意：后端当前路径拼写为 upadte（若后端修正为 update，请同步修改）
-export const updateUserInfo = (data) => request.put('/upadte/info', data)
+export const updateUserInfo = (data) => request.put('/user/update/info', data)
 
-// 更新密码：password 作为 query 参数
-export const updatePassword = (password) =>
-  request.put('/upadte/password', null, { params: { password } })
+// 更新密码：{ oldPassword, newPassword }
+export const updatePassword = (data) => request.put('/user/update/password', data)

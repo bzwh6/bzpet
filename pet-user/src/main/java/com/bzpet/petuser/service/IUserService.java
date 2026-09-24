@@ -3,6 +3,7 @@ package com.bzpet.petuser.service;
 import com.bzpet.common.domain.R;
 import com.bzpet.petuser.domain.dto.LoginFormDTO;
 import com.bzpet.petuser.domain.dto.RegisterDTO;
+import com.bzpet.petuser.domain.dto.UpdatePasswordDTO;
 import com.bzpet.petuser.domain.dto.UserInfoDTO;
 import com.bzpet.petuser.domain.po.User;
 import com.baomidou.mybatisplus.extension.service.IService;
@@ -34,5 +35,5 @@ public interface IUserService extends IService<User> {
 
     R<String> updateUserInfo(@Valid UserInfoDTO userInfoDTO);
 
-    R<String> updatePassword(String password);
+    R<String> updatePassword(UpdatePasswordDTO updatePasswordDTO);
 }

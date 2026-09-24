@@ -4,6 +4,7 @@ package com.bzpet.petuser.controller;
 import com.bzpet.common.domain.R;
 import com.bzpet.petuser.domain.dto.LoginFormDTO;
 import com.bzpet.petuser.domain.dto.RegisterDTO;
+import com.bzpet.petuser.domain.dto.UpdatePasswordDTO;
 import com.bzpet.petuser.domain.dto.UserInfoDTO;
 import com.bzpet.petuser.domain.vo.UserInfoVO;
 import com.bzpet.petuser.domain.vo.UserVO;
@@ -70,7 +71,7 @@ public class UserController {
 
     @PutMapping("/update/password")
     @Operation(summary = "更新用户密码接口")
-    public R<String> updatePassword(@RequestParam String password){
-        return userService.updatePassword(password);
+    public R<String> updatePassword(@Valid @RequestBody UpdatePasswordDTO updatePasswordDTO){
+        return userService.updatePassword(updatePasswordDTO);
     }
 }

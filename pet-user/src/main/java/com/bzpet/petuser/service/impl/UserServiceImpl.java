@@ -10,6 +10,7 @@ import com.bzpet.common.utils.UserContext;
 import com.bzpet.petjwt.utils.JwtUtil;
 import com.bzpet.petuser.domain.dto.LoginFormDTO;
 import com.bzpet.petuser.domain.dto.RegisterDTO;
+import com.bzpet.petuser.domain.dto.UpdatePasswordDTO;
 import com.bzpet.petuser.domain.dto.UserInfoDTO;
 import com.bzpet.petuser.domain.po.User;
 import com.bzpet.petuser.domain.vo.UserInfoVO;
@@ -130,21 +131,24 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         if (user == null) {
             throw new BadException("用户不存在！");
         }
-        //校验手机号是否已存在
+        //校验手机号是否已被其他用户使用
         if (lambdaQuery()
                 .eq(User::getPhone, userInfoDTO.getPhone())
+                .ne(User::getId, userId)
                 .count() > 0) {
             throw new BadException("手机号已存在！");
         }
-        //校验邮箱是否已存在
+        //校验邮箱是否已被其他用户使用
         if (lambdaQuery()
                 .eq(User::getEmail, userInfoDTO.getEmail())
+                .ne(User::getId, userId)
                 .count() > 0) {
             throw new BadException("邮箱已存在！");
         }
-        //校验用户名是否已存在
+        //校验用户名是否已被其他用户使用
         if (lambdaQuery()
                 .eq(User::getUsername, userInfoDTO.getUsername())
+                .ne(User::getId, userId)
                 .count() > 0) {
             throw new BadException("用户名已存在！");
         }
@@ -161,7 +165,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
 
 
     @Override
-    public R<String> updatePassword(String password) {
+    public R<String> updatePassword(UpdatePasswordDTO updatePasswordDTO) {
         //获取用户id
         Long userId = UserContext.getUserId();
         //根据用户id查询用户
@@ -169,12 +173,16 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         if (user == null) {
             throw new BadException("用户不存在！");
         }
-        //校验密码是否正确
-        if (!BCrypt.checkpw(password, user.getPassword())) {
-            throw new BadException("密码错误！");
+        //校验旧密码是否正确
+        if (!BCrypt.checkpw(updatePasswordDTO.getOldPassword(), user.getPassword())) {
+            throw new BadException("旧密码错误！");
         }
-        //更新用户密码
-        String hashpw = BCrypt.hashpw(password);
+        //新密码不能与旧密码相同
+        if (updatePasswordDTO.getOldPassword().equals(updatePasswordDTO.getNewPassword())) {
+            throw new BadException("新密码不能与旧密码相同！");
+        }
+        //加密并更新新密码
+        String hashpw = BCrypt.hashpw(updatePasswordDTO.getNewPassword());
         user.setPassword(hashpw);
         updateById(user);
         return R.ok("密码更新成功。");
