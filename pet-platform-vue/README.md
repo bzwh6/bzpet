@@ -59,8 +59,9 @@ src/
 | POST /user/register | 注册 |
 | POST /user/logout?token= | 退出登录 |
 | GET /user/userInfo/{id} | 用户信息 |
-| PUT /user/update/info | 更新资料 |
+| PUT /user/update/info | 更新资料（nickname / avatar） |
 | PUT /user/update/password | 修改密码（body: oldPassword / newPassword） |
+| POST /user/avatar/upload | 上传头像到阿里云 OSS（FormData 字段名 `file`），返回图片 URL，再由 update/info 入库 |
 | GET /pets/list | 宠物分页列表 |
 | GET /pets/detail/{id} | 宠物详情 |
 | POST /pets/add | 发布宠物 |

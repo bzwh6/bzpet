@@ -156,6 +156,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         lambdaUpdate()
                 .eq(User::getId, userId)
                 .set(userInfoDTO.getNickname() != null, User::getNickname, userInfoDTO.getNickname())
+                .set(userInfoDTO.getAvatar() != null, User::getAvatar, userInfoDTO.getAvatar())
                 .set(userInfoDTO.getEmail() != null, User::getEmail, userInfoDTO.getEmail())
                 .set(userInfoDTO.getPhone() != null, User::getPhone, userInfoDTO.getPhone())
                 .set(userInfoDTO.getUsername() != null, User::getUsername, userInfoDTO.getUsername())

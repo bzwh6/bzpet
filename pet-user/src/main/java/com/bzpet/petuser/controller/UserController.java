@@ -9,11 +9,13 @@ import com.bzpet.petuser.domain.dto.UserInfoDTO;
 import com.bzpet.petuser.domain.vo.UserInfoVO;
 import com.bzpet.petuser.domain.vo.UserVO;
 import com.bzpet.petuser.service.IUserService;
+import com.bzpet.petuser.service.OssService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -32,6 +34,9 @@ import java.util.List;
 public class UserController {
     @Autowired
     private IUserService userService;
+
+    @Autowired
+    private OssService ossService;
 
     @PostMapping("/login")
     @Operation(summary = "登录接口")
@@ -65,7 +70,7 @@ public class UserController {
 
     @PutMapping("/update/info")
     @Operation(summary = "更新用户基础信息接口")
-    public R<String> updateUserInfo(@RequestBody UserInfoDTO userInfoDTO){
+    public R<String> updateUserInfo(@Valid @RequestBody UserInfoDTO userInfoDTO){
         return userService.updateUserInfo(userInfoDTO);
     }
 
@@ -73,5 +78,11 @@ public class UserController {
     @Operation(summary = "更新用户密码接口")
     public R<String> updatePassword(@Valid @RequestBody UpdatePasswordDTO updatePasswordDTO){
         return userService.updatePassword(updatePasswordDTO);
+    }
+
+    @PostMapping("/avatar/upload")
+    @Operation(summary = "上传头像到阿里云OSS")
+    public R<String> uploadAvatar(@RequestParam("file") MultipartFile file) {
+        return R.ok(ossService.upload(file, "avatar"));
     }
 }

@@ -21,4 +21,7 @@ public class UserInfoDTO {
     @Pattern(regexp = "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,6}$", message = "邮箱格式不正确")
     @Schema(description = "邮箱")
     private String email;
+
+    @Schema(description = "用户头像url")
+    private String avatar;
 }

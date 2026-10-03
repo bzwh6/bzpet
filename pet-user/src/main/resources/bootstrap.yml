@@ -18,6 +18,8 @@ spring:
             refresh: true
           - data-id: shared-mysql.yaml # 共享mysql配置
             refresh: true
+          - data-id: shared-aliyun.yaml # 共享阿里云配置
+            refresh: true
 bz:
   swagger:
     enable: true

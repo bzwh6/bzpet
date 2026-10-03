@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getUserInfo, updateUserInfo, updatePassword } from '../api/user'
+import { getUserInfo, updateUserInfo, updatePassword, uploadAvatar } from '../api/user'
 import { useUserStore } from '../store/user'
 
 const userStore = useUserStore()
@@ -17,6 +17,15 @@ async function load() {
 async function saveInfo() {
   await updateUserInfo(info.value)
   ElMessage.success('更新成功')
+}
+
+// 上传头像到 OSS，拿到 URL 后回填（再点保存资料入库）
+async function onUpload({ file }) {
+  const fd = new FormData()
+  fd.append('file', file)
+  const url = await uploadAvatar(fd)
+  info.value.avatar = url
+  ElMessage.success('头像上传成功，请点击“保存资料”')
 }
 
 async function savePassword() {
@@ -42,8 +51,11 @@ onMounted(load)
       <el-form-item label="昵称">
         <el-input v-model="info.nickname" />
       </el-form-item>
-      <el-form-item label="头像URL">
-        <el-input v-model="info.avatar" placeholder="图片地址" />
+      <el-form-item label="头像">
+        <el-upload :show-file-list="false" :http-request="onUpload" accept="image/*">
+          <el-avatar :size="72" :src="info.avatar">头像</el-avatar>
+          <el-button size="small" style="margin-left: 12px">更换头像</el-button>
+        </el-upload>
       </el-form-item>
       <el-form-item>
         <el-button type="primary" @click="saveInfo">保存资料</el-button>

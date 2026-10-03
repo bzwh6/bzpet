@@ -20,3 +20,9 @@ export const updateUserInfo = (data) => request.put('/user/update/info', data)
 
 // 更新密码：{ oldPassword, newPassword }
 export const updatePassword = (data) => request.put('/user/update/password', data)
+
+// 上传头像（FormData，字段名 file），返回 OSS 图片地址
+export const uploadAvatar = (formData) =>
+  request.post('/user/avatar/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
