@@ -17,7 +17,6 @@ import com.bzpet.petpet.domain.po.UserLike;
 import com.bzpet.petpet.domain.query.PetQueryDTO;
 import com.bzpet.petpet.domain.vo.PetQueryVO;
 import com.bzpet.petpet.enums.AdoptionStatus;
-import com.bzpet.petpet.enums.ApplicaltionStatus;
 import com.bzpet.petpet.mapper.PetMapper;
 import com.bzpet.petpet.service.IPetService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -30,7 +29,6 @@ import org.redisson.api.RedissonClient;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;

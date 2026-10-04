@@ -11,7 +11,7 @@
     </parent>
 
 
-    <artifactId>pet-getway</artifactId>
+    <artifactId>pet-gateway</artifactId>
     <name>pet-getway</name>
     <description>pet-getway</description>
 

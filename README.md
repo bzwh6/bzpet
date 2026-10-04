@@ -7,23 +7,23 @@
 ```
 pet-platform-vue（Vue 3 + Vite，dev :5173）
         │  /api 前缀经 vite proxy 转发并去掉前缀
-pet-getway（getway-service，:8083）── 登录鉴权 GlobalFilter
+pet-gateway（getway-service，:8083）── 登录鉴权 GlobalFilter
         │  Nacos 注册中心 + 配置中心，lb 负载均衡
         ├── /user/**                     → pet-user（user-service，:8081）
         └── /pets/** /notification/**    → pet-pet（pet-service，:8082）
                                              └── OpenFeign 调用 user-service 查用户信息
 ```
 
-支撑设施：Nacos、MySQL、Redis（+Redisson）、RabbitMQ、xxl-job、Sentinel。
+支撑设施：Nacos、MySQL、Redis（+Redisson）、RabbitMQ、xxl-job、Sentinel、阿里云 OSS。
 
 ## 模块说明
 
 | 模块 | 说明 |
 |---|---|
-| pet-getway | 网关：路由转发 + 登录校验（JWT 签名校验 + Redis token 双重验证，滑动续期），向下游透传 `userId` 请求头 |
-| pet-user | 用户服务：注册（BCrypt）、登录（签发 JWT + Redis 存 token）、登出、用户信息/列表、资料与密码修改 |
+| pet-gateway | 网关：路由转发 + 登录校验（JWT 签名校验 + Redis token 双重验证，滑动续期），统一生成并透传请求链路 id（`requestId`），向下游透传 `userId` 请求头 |
+| pet-user | 用户服务：注册（BCrypt）、登录（签发 JWT + Redis 存 token）、登出、用户信息/列表、资料与密码修改、头像上传（阿里云 OSS） |
 | pet-pet | 宠物服务：宠物管理与分页查询、点赞、领养申请与审批、站内通知（`/notification/**` 也在本服务） |
-| pet-common | 公共自动配置：统一响应 `R`、全局异常、`UserContext` 拦截器、RabbitTemplate（手动 ack / confirm / return）、Redisson、xxl-job、Knife4j |
+| pet-common | 公共自动配置：统一响应 `R`、全局异常、`UserContext` 拦截器、请求链路 id 过滤器（`RequestIdFilter`）、RabbitTemplate（手动 ack / confirm / return）、Redisson、xxl-job、Knife4j |
 | pet-jwt | JWT 生成与解析工具 |
 | pet-api | OpenFeign 客户端定义（服务间调用） |
 | pet-platform-vue | 前端，详见其目录内 `README.md` |
@@ -31,7 +31,7 @@ pet-getway（getway-service，:8083）── 登录鉴权 GlobalFilter
 ## 技术栈
 
 - 后端：Java 17、Spring Boot 3.3.7、Spring Cloud 2023.0.1、Spring Cloud Alibaba 2023.0.1.0、MyBatis-Plus 3.5.12、Knife4j（OpenAPI3）
-- 中间件：Nacos（注册 + 配置）、MySQL、Redis + Redisson、RabbitMQ、Sentinel、xxl-job 3.0.0
+- 中间件/服务：Nacos（注册 + 配置）、MySQL、Redis + Redisson、RabbitMQ、Sentinel、xxl-job 3.0.0、阿里云 OSS（对象存储）
 - 前端：Vue 3 + Vite + Element Plus + Pinia + Vue Router + Axios
 
 ## 核心设计
@@ -40,6 +40,8 @@ pet-getway（getway-service，:8083）── 登录鉴权 GlobalFilter
 - **宠物详情缓存**：空值缓存防穿透、Redisson 分布式锁防击穿、随机过期时间防雪崩。
 - **点赞**：Lua 脚本原子操作 Redis（Set 存点赞关系 + ZSet 存计数 + dirty 集合标记待同步），实时计数走 Redis；xxl-job `syncUserLikeJob` 定时对账，把点赞/取消落库到 `user_like` 表与 `pet.likes_count`。
 - **领养审批通知**：本地消息表 `message_compensation`（事务内落表，`afterCommit` 后发 MQ）+ publisher confirm/return 回调联动置"待重试" + xxl-job 定时重发与清理 + 消费端死信队列兜底；审批通过用乐观锁防并发超领，并自动拒绝同宠物的其它申请；消费端手动 ack + Redis 幂等。
+- **头像上传**：`POST /user/avatar/upload` 接收 `MultipartFile`，`OssService` 以 UUID 命名上传阿里云 OSS 并返回可访问 URL，URL 再由 `PUT /user/update/info` 的 `avatar` 字段入库（上传接口只存文件、update 接口存 URL）。AK/SK、bucket、域名等经 Nacos 的 `aliyun.oss.*` 注入。
+- **请求链路追踪**：网关 `RequestIdGlobalFilter` 统一生成/透传 `requestId`；各服务 `RequestIdFilter` 把它写入 MDC（日志 pattern 用 `%X{requestId}` 自动带出），并回写响应头与 `R.requestId`；Feign 由 `RequestInterceptor` 透传，保证 `pet-pet → pet-user` 的链路不断。请求结束在 `finally` 清理 MDC，避免线程复用串号。
 
 ## 数据表
 
@@ -48,7 +50,7 @@ pet-getway（getway-service，:8083）── 登录鉴权 GlobalFilter
 ## 本地运行
 
 1. **准备中间件**：Nacos、MySQL、Redis、RabbitMQ、xxl-job-admin（Sentinel dashboard 可选）。Nacos 地址在各模块 `bootstrap-dev.yml`（当前为 `192.168.150.101:8848`，按实际环境修改）。
-2. **Nacos 共享配置**：配置中心需存在 `shared-mysql.yaml`、`shared-redis.yaml`、`shared-mybatis.yaml`、`shared-rabbitmq.yaml`、`shared-xxljob.yaml`、`shared-sentinel.yaml`，各服务通过 `bootstrap.yml` 引用（数据库名取自各服务 `bz.db.database`）。
+2. **Nacos 共享配置**：配置中心需存在 `shared-mysql.yaml`、`shared-redis.yaml`、`shared-mybatis.yaml`、`shared-rabbitmq.yaml`、`shared-xxljob.yaml`、`shared-sentinel.yaml`，各服务通过 `bootstrap.yml` 引用（数据库名取自各服务 `bz.db.database`）。`pet-user` 另需配置 `aliyun.oss.*`（`endpoint` / `access-key-id` / `access-key-secret` / `bucket-name` / `domain`，endpoint 与 domain 须和 bucket 地域一致）以及 `spring.servlet.multipart.max-file-size`（默认 1MB，上传图片需调大）。
 3. **建库建表**：按上节建 `pet_user`、`pet_pet` 两个库；仓库未提交 SQL 脚本，表结构可参照各 `domain/po` 实体创建。
 4. **启动后端**：依次运行 `PetUserApplication`、`PetPetApplication`、`PetGetwayApplication`（或 `mvn spring-boot:run`）。
 5. **启动前端**：

@@ -28,6 +28,7 @@ npm run build        # 构建
 
 - 登录后 token 存入 localStorage，请求拦截器自动加到 `Authorization` header（网关读取该 header）。
 - 响应拦截器解包后端统一响应 `R { code, msg, data }`：`code === 200` 返回 `data`，否则弹错误提示；HTTP 401 清 token 跳登录。
+- 每个响应都带请求链路 id（响应头 `requestId`，响应体 `R.requestId`），报错时把它提供给后端，即可按一次请求定位全链路日志。
 
 ## 目录结构
 

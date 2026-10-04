@@ -18,6 +18,12 @@ spring:
             refresh: true
           - data-id: shared-mysql.yaml # 共享mysql配置
             refresh: true
+
+# 日志格式：带上 requestId，便于按一次请求定位日志
+logging:
+  pattern:
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level [%X{requestId}] %logger{36} - %msg%n"
+    file: "%d{HH:mm:ss.SSS} [%thread] %-5level [%X{requestId}] %logger{36} - %msg%n"
 bz:
   db:
     database: pet_getway

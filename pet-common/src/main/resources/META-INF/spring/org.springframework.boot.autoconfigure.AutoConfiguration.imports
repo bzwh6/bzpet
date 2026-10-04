@@ -2,6 +2,7 @@ com.bzpet.common.autoConfig.swagger.Knife4jConfiguration
 com.bzpet.common.autoConfig.handler.GlobalExceptionHandler
 com.bzpet.common.autoConfig.handler.MyMetaObjectHandler
 com.bzpet.common.autoConfig.interceptor.WebMvcConfiguration
+com.bzpet.common.autoConfig.filter.RequestIdConfig
 com.bzpet.common.autoConfig.mp.MybatisPlusConfig
 com.bzpet.common.autoConfig.mq.RabbitMQConfiguration
 com.bzpet.common.autoConfig.redis.RedissonConfig

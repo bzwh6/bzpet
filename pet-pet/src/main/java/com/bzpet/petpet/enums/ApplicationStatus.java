@@ -6,7 +6,7 @@ import com.fasterxml.jackson.annotation.JsonValue;
 import lombok.Getter;
 
 @Getter
-public enum ApplicaltionStatus {
+public enum ApplicationStatus {
     PENDING(0,"待审核"),
     APPROVED(1,"已同意"),
     REJECTED(2,"已拒绝");
@@ -14,14 +14,14 @@ public enum ApplicaltionStatus {
     private final int value;
     private final String desc;
 
-    ApplicaltionStatus(int value, String desc) {
+    ApplicationStatus(int value, String desc) {
         this.value = value;
         this.desc = desc;
     }
 
     @JsonCreator
-    public static ApplicaltionStatus fromCode(int code) {
-        for (ApplicaltionStatus a : values()) {
+    public static ApplicationStatus fromCode(int code) {
+        for (ApplicationStatus a : values()) {
             if (a.value == code) return a;
         }
         throw new IllegalArgumentException("未知领养申请状态代码: " + code);

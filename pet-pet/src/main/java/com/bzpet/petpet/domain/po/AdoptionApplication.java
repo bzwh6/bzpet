@@ -5,7 +5,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import java.time.LocalDateTime;
 import java.io.Serializable;
-import com.bzpet.petpet.enums.ApplicaltionStatus;
+import com.bzpet.petpet.enums.ApplicationStatus;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -45,7 +45,7 @@ public class AdoptionApplication implements Serializable {
     private String reason;
 
     @Schema(description="状态: 0待审核 1已同意 2已拒绝")
-    private ApplicaltionStatus status;
+    private ApplicationStatus status;
 
     @Schema(description="申请时间")
     private LocalDateTime createTime;

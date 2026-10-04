@@ -23,7 +23,7 @@ import com.bzpet.petpet.domain.po.Pet;
 import com.bzpet.petpet.domain.query.AdoptionApplyQueryDTO;
 import com.bzpet.petpet.domain.vo.AdoptionApplyVO;
 import com.bzpet.petpet.enums.AdoptionStatus;
-import com.bzpet.petpet.enums.ApplicaltionStatus;
+import com.bzpet.petpet.enums.ApplicationStatus;
 import com.bzpet.petpet.enums.BusinessType;
 import com.bzpet.petpet.mapper.AdoptionApplicationMapper;
 import com.bzpet.petpet.service.IAdoptionApplicationService;
@@ -81,7 +81,7 @@ public class AdoptionApplicationServiceImpl extends ServiceImpl<AdoptionApplicat
         adoptionApplication.setReason(applyDTO.getReason());
         adoptionApplication.setApplicantId(userId);
         adoptionApplication.setPublisherId(pet.getPublisherId());
-        adoptionApplication.setStatus(ApplicaltionStatus.PENDING);
+        adoptionApplication.setStatus(ApplicationStatus.PENDING);
         adoptionApplication.setPetId(applyDTO.getPetId());
         try {
             //保存领养申请
@@ -206,14 +206,14 @@ public class AdoptionApplicationServiceImpl extends ServiceImpl<AdoptionApplicat
             throw new BadException("您没有权限处理该领养申请");
         }
         //判断领养申请状态是否为待审核
-        if (application.getStatus() != ApplicaltionStatus.PENDING) {
+        if (application.getStatus() != ApplicationStatus.PENDING) {
             throw new BadException("领养申请状态不是待审核");
         }
         //判断领养申请状态是否为已同意或已拒绝
-        if (processDTO.getStatus() != ApplicaltionStatus.APPROVED && processDTO.getStatus() != ApplicaltionStatus.REJECTED) {
+        if (processDTO.getStatus() != ApplicationStatus.APPROVED && processDTO.getStatus() != ApplicationStatus.REJECTED) {
             throw new BadException("领养申请状态错误");
         }
-        boolean isAccept = processDTO.getStatus() == ApplicaltionStatus.APPROVED;
+        boolean isAccept = processDTO.getStatus() == ApplicationStatus.APPROVED;
         //先更新宠物状态，更新宠物状态的时候加乐观锁判断是否成功更新
         boolean update = petService.lambdaUpdate()
                 .eq(Pet::getStatus, AdoptionStatus.AVAILABLE)
@@ -223,7 +223,7 @@ public class AdoptionApplicationServiceImpl extends ServiceImpl<AdoptionApplicat
         if (!update) throw new BadException("宠物状态更新失败");
         //更新领养申请状态
         application.setStatus(isAccept ?
-                ApplicaltionStatus.APPROVED : ApplicaltionStatus.REJECTED);
+                ApplicationStatus.APPROVED : ApplicationStatus.REJECTED);
         application.setAuditTime(LocalDateTime.now());
         application.setReason(isAccept ? null : processDTO.getRejectReason());
         updateById(application);

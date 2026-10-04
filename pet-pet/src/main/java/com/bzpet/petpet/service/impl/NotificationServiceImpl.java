@@ -14,25 +14,20 @@ import com.bzpet.petpet.domain.dto.NotificationDTO;
 import com.bzpet.petpet.domain.dto.ProcessDTO;
 import com.bzpet.petpet.domain.po.AdoptionApplication;
 import com.bzpet.petpet.domain.po.Notification;
-import com.bzpet.petpet.domain.po.Pet;
 import com.bzpet.petpet.domain.query.NotificationQueryDTO;
 import com.bzpet.petpet.domain.vo.NotificationQueryVO;
 import com.bzpet.petpet.domain.vo.NotificationVO;
-import com.bzpet.petpet.enums.AdoptionStatus;
-import com.bzpet.petpet.enums.ApplicaltionStatus;
+import com.bzpet.petpet.enums.ApplicationStatus;
 import com.bzpet.petpet.mapper.NotificationMapper;
-import com.bzpet.petpet.mapper.PetMapper;
 import com.bzpet.petpet.service.IAdoptionApplicationService;
 import com.bzpet.petpet.service.INotificationService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import com.bzpet.petpet.service.IPetService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -114,8 +109,8 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
                         .in(AdoptionApplication::getApplicantId, dto.getApplicantId())
                         .eq(AdoptionApplication::getPublisherId, dto.getPublisherId())
                         .eq(AdoptionApplication::getPetId, dto.getPetId())
-                        .eq(AdoptionApplication::getStatus,ApplicaltionStatus.PENDING)
-                        .set(AdoptionApplication::getStatus,ApplicaltionStatus.REJECTED)
+                        .eq(AdoptionApplication::getStatus, ApplicationStatus.PENDING)
+                        .set(AdoptionApplication::getStatus, ApplicationStatus.REJECTED)
                         .update();
                 //向其他申请人发送通知，通知被拒绝,批量插入
                 List<Notification> notificationList = new ArrayList<>();

@@ -19,7 +19,7 @@
         <module>pet-common</module>
         <module>pet-user</module>
         <module>pet-pet</module>
-        <module>pet-getway</module>
+        <module>pet-gateway</module>
         <module>pet-jwt</module>
         <module>pet-api</module>
     </modules>
