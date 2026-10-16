@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  pet-gateway:
+    build:
+      context: .
+      dockerfile: pet-gateway/Dockerfile
+    image: pet-gateway:1.0
+    container_name: pet-gateway
+    restart: unless-stopped
+    ports:
+      - "8083:8083"
+    networks:
+      - pet-net
+
+  pet-user:
+    build:
+      context: .
+      dockerfile: pet-user/Dockerfile
+    image: pet-user:1.0
+    container_name: pet-user
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    networks:
+      - pet-net
+
+  pet-pet:
+    build:
+      context: .
+      dockerfile: pet-pet/Dockerfile
+    image: pet-pet:1.0
+    container_name: pet-pet
+    restart: unless-stopped
+    ports:
+      - "8082:8082"
+    networks:
+      - pet-net
+
+networks:
+  pet-net:
+    driver: bridge

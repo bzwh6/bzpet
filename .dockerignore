@@ -1,0 +1,10 @@
+**/target/
+**/.git/
+**/.idea/
+**/*.iml
+**/node_modules/
+**/.npm-cache/
+pet-platform-vue/
+*.md
+.gitignore
+docker-compose.yml
