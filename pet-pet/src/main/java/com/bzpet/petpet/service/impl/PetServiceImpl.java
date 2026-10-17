@@ -285,6 +285,11 @@ public class PetServiceImpl extends ServiceImpl<PetMapper, Pet> implements IPetS
         List<Long> petIds = dirtyPets.stream().map(Long::valueOf).collect(Collectors.toList());
         log.info("开始同步点赞数据，待同步宠物数：{}", petIds.size());
 
+        //先删脏标记（认领）再处理：处理期间若有人点赞/取消，Lua 会重新标记该宠物，
+        //下一轮任务会带着最新快照再同步一次，避免并发变更的标记被误删导致永久漏同步
+        stringRedisTemplate.opsForSet().remove(RedisConstants.KEY.LIKE_DIRTY_PETS_KEY,
+                dirtyPets.toArray(new String[0]));
+
         //1. 从 Redis 取每个宠物的点赞用户集合（key 不存在视为空集，即被取消到 0 赞）
         Map<Long, Set<Long>> redisLikeMap = new HashMap<>(petIds.size());
         for (Long petId : petIds) {
@@ -343,9 +348,7 @@ public class PetServiceImpl extends ServiceImpl<PetMapper, Pet> implements IPetS
             updateBatchById(toUpdateCount);
         }
 
-        //5. 清除脏标记
-        stringRedisTemplate.opsForSet().remove(RedisConstants.KEY.LIKE_DIRTY_PETS_KEY,
-                dirtyPets.toArray(new String[0]));
+        //5. 落库完成（脏标记已在处理前认领删除，此处不再删除）
         log.info("点赞数据同步完成，新增{}条，删除{}条", toInsert.size(), toDeleteIds.size());
     }
 
