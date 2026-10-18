@@ -4,6 +4,7 @@ package com.bzpet.petpet.controller;
 
 import com.bzpet.common.domain.R;
 import com.bzpet.common.domain.dto.PageDTO;
+import com.bzpet.common.domain.query.PageQuery;
 import com.bzpet.petpet.domain.dto.PetDTO;
 import com.bzpet.petpet.domain.query.PetQueryDTO;
 import com.bzpet.petpet.domain.vo.BreedVO;
@@ -38,6 +39,18 @@ public class PetController {
     @GetMapping("/list")
     public R<PageDTO<PetQueryVO>> petList(@ParameterObject PetQueryDTO petDTO) {
         return petService.petList(petDTO);
+    }
+
+    @Operation(summary="分页查询我发布的宠物")
+    @GetMapping("/my")
+    public R<PageDTO<PetQueryVO>> myPetList(@ParameterObject PetQueryDTO petDTO) {
+        return petService.myPetList(petDTO);
+    }
+
+    @Operation(summary="分页查询我点赞的宠物")
+    @GetMapping("/liked")
+    public R<PageDTO<PetQueryVO>> likedPetList(@ParameterObject PageQuery query) {
+        return petService.likedPetList(query);
     }
     @Operation(summary="宠物品种字典")
     @GetMapping("/breeds")

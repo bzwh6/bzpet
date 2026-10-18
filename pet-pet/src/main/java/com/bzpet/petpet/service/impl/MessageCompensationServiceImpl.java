@@ -1,13 +1,16 @@
 package com.bzpet.petpet.service.impl;
 
 import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
+import com.bzpet.common.constants.Constant;
 import com.bzpet.petpet.domain.po.MessageCompensation;
 import com.bzpet.petpet.mapper.MessageCompensationMapper;
 import com.bzpet.petpet.service.IMessageCompensationService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
@@ -47,12 +50,7 @@ public class MessageCompensationServiceImpl extends ServiceImpl<MessageCompensat
             return;
         }
         try {
-            rabbitTemplate.convertAndSend(
-                    compensation.getExchangeName(),
-                    compensation.getRoutingKey(),
-                    JSONUtil.parse(compensation.getMessageContent()),
-                    new CorrelationData(compensation.getMessageId())
-            );
+            doSend(compensation);
             lambdaUpdate()
                     .eq(MessageCompensation::getId, compensationId)
                     .set(MessageCompensation::getStatus, 1)
@@ -68,6 +66,30 @@ public class MessageCompensationServiceImpl extends ServiceImpl<MessageCompensat
                     .set(MessageCompensation::getUpdateTime, LocalDateTime.now())
                     .update();
         }
+    }
+
+    /**
+     * 发送消息：顺带把当前线程的 requestId 写进消息头。
+     * <p>
+     * 投递发生在请求线程（afterCommit）时能取到 MDC；定时任务重发时线程里没有 MDC，
+     * 此时不设该头，消费端会退化为不带链路 id 的日志。
+     */
+    private void doSend(MessageCompensation compensation) {
+        String requestId = MDC.get(Constant.REQUEST_ID_HEADER);
+        rabbitTemplate.convertAndSend(
+                compensation.getExchangeName(),
+                compensation.getRoutingKey(),
+                JSONUtil.parse(compensation.getMessageContent()),
+                message -> {
+                    if (StrUtil.isNotBlank(requestId)) {
+                        message.getMessageProperties().setHeader(Constant.REQUEST_ID_HEADER, requestId);
+                    }
+                    //服务端消息 id 也带上，便于和补偿表按 messageId 关联
+                    message.getMessageProperties().setMessageId(compensation.getMessageId());
+                    return message;
+                },
+                new CorrelationData(compensation.getMessageId())
+        );
     }
 
     @Override
@@ -93,12 +115,7 @@ public class MessageCompensationServiceImpl extends ServiceImpl<MessageCompensat
             //本次重发即一次失败重试，失败次数 +1
             int newRetryCount = compensation.getRetryCount() + 1;
             try {
-                rabbitTemplate.convertAndSend(
-                        compensation.getExchangeName(),
-                        compensation.getRoutingKey(),
-                        JSONUtil.parse(compensation.getMessageContent()),
-                        new CorrelationData(compensation.getMessageId())
-                );
+                doSend(compensation);
                 lambdaUpdate()
                         .eq(MessageCompensation::getId, compensation.getId())
                         .set(MessageCompensation::getStatus, 1)

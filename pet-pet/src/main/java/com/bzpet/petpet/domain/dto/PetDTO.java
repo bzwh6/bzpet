@@ -30,7 +30,4 @@ public class PetDTO {
 
     @Schema(description="发布人ID")
     private Long publisherId;
-
-    @Schema(description="点赞数量")
-    private Integer likesCount;
 }

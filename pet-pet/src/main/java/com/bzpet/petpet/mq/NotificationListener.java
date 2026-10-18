@@ -1,21 +1,21 @@
 package com.bzpet.petpet.mq;
 
 
+import com.bzpet.common.constants.Constant;
 import com.bzpet.common.constants.MqConstants;
-import com.bzpet.common.constants.RedisConstants;
 import com.bzpet.petpet.config.MqDeadLetterConfig;
 import com.bzpet.petpet.domain.dto.NotificationDTO;
 import com.bzpet.petpet.domain.dto.ProcessDTO;
 import com.bzpet.petpet.service.INotificationService;
 import com.rabbitmq.client.Channel;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.MDC;
 import org.springframework.amqp.rabbit.annotation.Argument;
 import org.springframework.amqp.rabbit.annotation.Exchange;
 import org.springframework.amqp.rabbit.annotation.Queue;
 import org.springframework.amqp.rabbit.annotation.QueueBinding;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.support.AmqpHeaders;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
 
@@ -28,10 +28,8 @@ public class NotificationListener {
 
     /**
      * 监听通知队列
-     * @param dto
-     * @param channel
-     * @param deliveryTag
-     * @throws IOException
+     *
+     * @param requestId 生产端透传的链路 id（定时任务重发时可能没有）
      */
     @RabbitListener(bindings = @QueueBinding(
             value = @Queue(name = "notification.adoption.queue", durable = "true",
@@ -42,8 +40,11 @@ public class NotificationListener {
             exchange = @Exchange(name = MqConstants.Exchange.PET_ADPTION_EXCHANGE, type = "topic"),
             key = MqConstants.Key.PET_ADPTION_ROUTING_KEY
     ))
-    public void addNotification(NotificationDTO dto, Channel channel,
+    public void addNotification(NotificationDTO dto,
+                                @Header(name = Constant.REQUEST_ID_HEADER, required = false) String requestId,
+                                Channel channel,
                                 @Header(AmqpHeaders.DELIVERY_TAG) Long deliveryTag) throws IOException {
+        putRequestId(requestId);
         try {
             //添加通知到数据库
             notificationService.addNotification(dto);
@@ -51,6 +52,9 @@ public class NotificationListener {
             channel.basicAck(deliveryTag, false);
         } catch (Exception e) {
             throw new RuntimeException(e);
+        } finally {
+            //消费线程是复用的，必须清掉，否则链路 id 会串到下一条消息
+            MDC.remove(Constant.REQUEST_ID_HEADER);
         }
     }
 
@@ -63,16 +67,20 @@ public class NotificationListener {
             exchange = @Exchange(name = MqConstants.Exchange.PET_ADPTION_EXCHANGE, type = "topic"),
             key = MqConstants.Key.PET_ADPTION_ACCEPT_ROUTING_KEY
     ))
-    public void acceptAdoptionApplication(ProcessDTO dto, Channel channel,
-                                          @Header(AmqpHeaders.DELIVERY_TAG) Long deliveryTag) throws IOException  {
+    public void acceptAdoptionApplication(ProcessDTO dto,
+                                          @Header(name = Constant.REQUEST_ID_HEADER, required = false) String requestId,
+                                          Channel channel,
+                                          @Header(AmqpHeaders.DELIVERY_TAG) Long deliveryTag) throws IOException {
+        putRequestId(requestId);
         try {
             //通过领养申请，更新领养申请状态为已通过
             notificationService.acceptAdoptionApplication(dto);
             channel.basicAck(deliveryTag, false);
         } catch (Exception e) {
             throw new RuntimeException(e);
+        } finally {
+            MDC.remove(Constant.REQUEST_ID_HEADER);
         }
-
     }
 
     @RabbitListener(bindings = @QueueBinding(
@@ -84,14 +92,26 @@ public class NotificationListener {
             exchange = @Exchange(name = MqConstants.Exchange.PET_ADPTION_EXCHANGE, type = "topic"),
             key = MqConstants.Key.PET_ADPTION_REJECT_ROUTING_KEY
     ))
-    public void rejectAdoptionApplication(ProcessDTO dto, Channel channel,
+    public void rejectAdoptionApplication(ProcessDTO dto,
+                                          @Header(name = Constant.REQUEST_ID_HEADER, required = false) String requestId,
+                                          Channel channel,
                                           @Header(AmqpHeaders.DELIVERY_TAG) Long deliveryTag) throws IOException {
+        putRequestId(requestId);
         try {
             //拒绝领养申请，更新领养申请状态为已拒绝
             notificationService.rejectAdoptionApplication(dto);
             channel.basicAck(deliveryTag, false);
         } catch (Exception e) {
             throw new RuntimeException(e);
+        } finally {
+            MDC.remove(Constant.REQUEST_ID_HEADER);
+        }
+    }
+
+    /** 把生产端透传的 requestId 放进 MDC，让消费侧日志能和触发它的那次请求串起来 */
+    private void putRequestId(String requestId) {
+        if (requestId != null && !requestId.isEmpty()) {
+            MDC.put(Constant.REQUEST_ID_HEADER, requestId);
         }
     }
 }

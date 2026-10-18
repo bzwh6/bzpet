@@ -12,6 +12,8 @@ public interface RedisConstants {
         String LIKE_PET_COUNT_KEY = "like:pet:count";
         // 待同步到数据库的宠物id集合（点赞/取消时标记，定时任务据此对账落库）
         String LIKE_DIRTY_PETS_KEY = "like:dirty:pets";
+        // 用户点赞过的宠物（ZSet：member=petId，score=点赞时间戳），供"我点赞的"按时间倒序查询
+        String LIKE_USER_KEY = "like:user:";
     }
 
     interface EXPIRE {

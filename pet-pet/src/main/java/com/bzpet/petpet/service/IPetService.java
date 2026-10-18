@@ -1,6 +1,7 @@
 package com.bzpet.petpet.service;
 
 import com.bzpet.common.domain.dto.PageDTO;
+import com.bzpet.common.domain.query.PageQuery;
 import com.bzpet.common.domain.R;
 import com.bzpet.petpet.domain.dto.PetDTO;
 import com.bzpet.petpet.domain.po.Pet;
@@ -22,6 +23,16 @@ import java.util.List;
 public interface IPetService extends IService<Pet> {
 
     R<PageDTO<PetQueryVO>> petList(PetQueryDTO petDTO);
+
+    /**
+     * 分页查询当前登录用户自己发布的宠物
+     */
+    R<PageDTO<PetQueryVO>> myPetList(PetQueryDTO petDTO);
+
+    /**
+     * 分页查询当前登录用户点赞过的宠物
+     */
+    R<PageDTO<PetQueryVO>> likedPetList(PageQuery query);
 
     R<PetQueryVO> petDetail(Long id) throws InterruptedException;
 

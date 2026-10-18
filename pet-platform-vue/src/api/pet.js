@@ -3,6 +3,12 @@ import request from './request'
 // 分页查询宠物列表：{ pageNo, pageSize, age, gender, adoptionStatus, breed }
 export const getPetList = (params) => request.get('/pets/list', { params })
 
+// 分页查询我发布的宠物：参数同列表页（发布人取自登录态）
+export const getMyPets = (params) => request.get('/pets/my', { params })
+
+// 分页查询我点赞的宠物：只支持分页（pageNo / pageSize）
+export const getLikedPets = (params) => request.get('/pets/liked', { params })
+
 // 品种字典（下拉选项与展示映射用）：[{ code, name }]
 export const getBreeds = () => request.get('/pets/breeds')
 

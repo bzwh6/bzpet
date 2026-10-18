@@ -9,6 +9,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.bzpet.common.constants.RedisConstants;
 import com.bzpet.common.domain.R;
 import com.bzpet.common.domain.dto.PageDTO;
+import com.bzpet.common.domain.query.PageQuery;
 import com.bzpet.common.exception.BadException;
 import com.bzpet.common.utils.UserContext;
 import com.bzpet.petpet.domain.dto.PetDTO;
@@ -29,14 +30,17 @@ import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -66,40 +70,150 @@ public class PetServiceImpl extends ServiceImpl<PetMapper, Pet> implements IPetS
 
     @Override
     public R<PageDTO<PetQueryVO>> petList(PetQueryDTO petDTO) {
-        //分页查询宠物列表
-        //获取分页查询参数
-        Integer pageNo = petDTO.getPageNo();
-        Integer pageSize = petDTO.getPageSize();
-        //获取查询条件
-        Integer age = petDTO.getAge();
-        Integer gender = petDTO.getGender();
-        Integer adoptionStatus = petDTO.getAdoptionStatus();
-        PetBreed breed = petDTO.getBreed();
-        //分页查询宠物列表
-        Page<Pet> page = lambdaQuery()
-                .eq(age != null, Pet::getAge, age)
-                .eq(gender != null, Pet::getGender, gender)
-                .eq(adoptionStatus != null, Pet::getStatus, adoptionStatus)
-                .eq(breed != null, Pet::getBreed, breed)
-                .orderByDesc(Pet::getCreateTime)
-                .page(new Page<>(pageNo, pageSize));
-        List<Pet> records = page.getRecords();
+        //公开列表：不限发布人
+        return R.ok(toPageDTO(pageQuery(petDTO, null)));
+    }
 
+    @Override
+    public R<PageDTO<PetQueryVO>> myPetList(PetQueryDTO petDTO) {
+        //当前登录用户（网关校验登录态后通过请求头透传 userId）
+        Long userId = UserContext.getUserId();
+        if (userId == null) {
+            throw new BadException("请先登录");
+        }
+        //只查自己发布的宠物，其余筛选条件（品种/状态/年龄/性别）与列表页保持一致
+        return R.ok(toPageDTO(pageQuery(petDTO, userId)));
+    }
+
+    @Override
+    public R<PageDTO<PetQueryVO>> likedPetList(PageQuery query) {
+        Long userId = UserContext.getUserId();
+        if (userId == null) {
+            throw new BadException("请先登录");
+        }
+        //点赞是"先写 Redis，再由定时任务落库"的，所以以 Redis 的用户点赞索引为准，
+        //否则刚点的赞要等下一轮对账才会出现在列表里
+        Map<Long, Long> petTimeMap = new LinkedHashMap<>();
+        boolean redisIndexReady = false;
+        try {
+            Set<ZSetOperations.TypedTuple<String>> tuples = stringRedisTemplate.opsForZSet()
+                    .reverseRangeWithScores(RedisConstants.KEY.LIKE_USER_KEY + userId, 0, -1);
+            if (tuples != null) {
+                for (ZSetOperations.TypedTuple<String> tuple : tuples) {
+                    if (tuple.getValue() == null) {
+                        continue;
+                    }
+                    petTimeMap.put(Long.valueOf(tuple.getValue()),
+                            tuple.getScore() == null ? 0L : tuple.getScore().longValue());
+                }
+            }
+            redisIndexReady = true;
+        } catch (Exception e) {
+            log.warn("读取用户点赞索引失败，降级查询 DB：{}", e.getMessage());
+        }
+        //索引上线之前的历史点赞只存在于 user_like，合并进来；已存在的不覆盖 Redis 里的时间戳
+        try {
+            List<UserLike> likes = userLikeService.lambdaQuery()
+                    .eq(UserLike::getUserId, userId)
+                    .list();
+            for (UserLike like : likes) {
+                if (like.getPetId() == null || petTimeMap.containsKey(like.getPetId())) {
+                    continue;
+                }
+                //索引正常时，DB 里可能还留着"已取消但没对账"的记录，用 Redis 集合再确认一次
+                boolean stillLiked = true;
+                if (redisIndexReady) {
+                    try {
+                        stillLiked = Boolean.TRUE.equals(stringRedisTemplate.opsForSet()
+                                .isMember(RedisConstants.KEY.LIKE_PET_KEY + like.getPetId(),
+                                        userId.toString()));
+                    } catch (Exception ignored) {
+                        //Redis 抖动时按 DB 记录处理，宁可多一条也不要少一条
+                    }
+                }
+                if (stillLiked) {
+                    petTimeMap.put(like.getPetId(), toEpochMilli(like.getCreateTime()));
+                }
+            }
+        } catch (Exception e) {
+            log.warn("补充历史点赞记录失败：{}", e.getMessage());
+        }
+        if (petTimeMap.isEmpty()) {
+            return R.ok(emptyPage());
+        }
+        //按点赞时间倒序：Redis 的 score 是点赞那一刻，比 DB 的 create_time 更准
+        List<Long> petIds = petTimeMap.entrySet().stream()
+                .sorted(Map.Entry.<Long, Long>comparingByValue().reversed())
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
+        //宠物已被删除的记录直接跳过
+        Map<Long, Pet> petMap = listByIds(petIds).stream()
+                .collect(Collectors.toMap(Pet::getId, pet -> pet, (a, b) -> a));
+        List<Pet> ordered = petIds.stream()
+                .map(petMap::get)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        //单个用户的点赞量有限，这里在内存里分页；若日后点赞量级变大，应改成按 petId 关联分页
+        int pageNo = query.getPageNo();
+        int pageSize = query.getPageSize();
+        int from = Math.min((pageNo - 1) * pageSize, ordered.size());
+        int to = Math.min(from + pageSize, ordered.size());
+
+        PageDTO<PetQueryVO> result = new PageDTO<>();
+        result.setTotal((long) ordered.size());
+        result.setPages((long) ((ordered.size() + pageSize - 1) / pageSize));
+        if (from >= to) {
+            result.setList(Collections.emptyList());
+            return R.ok(result);
+        }
+        List<PetQueryVO> voList = ordered.subList(from, to).stream()
+                .map(pet -> BeanUtil.copyProperties(pet, PetQueryVO.class))
+                .collect(Collectors.toList());
+        fillLikesCount(voList);
+        result.setList(voList);
+        return R.ok(result);
+    }
+
+    /** LocalDateTime -> 毫秒时间戳，空值按 0 处理（历史降级写入的记录没有 create_time） */
+    private long toEpochMilli(LocalDateTime time) {
+        return time == null ? 0L : time.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli();
+    }
+
+    private PageDTO<PetQueryVO> emptyPage() {
+        PageDTO<PetQueryVO> empty = new PageDTO<>();
+        empty.setTotal(0L);
+        empty.setPages(0L);
+        empty.setList(Collections.emptyList());
+        return empty;
+    }
+
+    /** 分页查询：publisherId 为 null 表示不限发布人，其余条件为 null 则不参与过滤 */
+    private Page<Pet> pageQuery(PetQueryDTO dto, Long publisherId) {
+        return lambdaQuery()
+                .eq(publisherId != null, Pet::getPublisherId, publisherId)
+                .eq(dto.getAge() != null, Pet::getAge, dto.getAge())
+                .eq(dto.getGender() != null, Pet::getGender, dto.getGender())
+                .eq(dto.getAdoptionStatus() != null, Pet::getStatus, dto.getAdoptionStatus())
+                .eq(dto.getBreed() != null, Pet::getBreed, dto.getBreed())
+                .orderByDesc(Pet::getCreateTime)
+                .page(new Page<>(dto.getPageNo(), dto.getPageSize()));
+    }
+
+    /** Page&lt;Pet&gt; 转 PageDTO&lt;PetQueryVO&gt;，点赞数用 Redis 实时值覆盖（DB 的 likes_count 只在定时对账时更新） */
+    private PageDTO<PetQueryVO> toPageDTO(Page<Pet> page) {
         PageDTO<PetQueryVO> result = new PageDTO<>();
         result.setTotal(page.getTotal());
         result.setPages(page.getPages());
+        List<Pet> records = page.getRecords();
         if (CollUtil.isEmpty(records)) {
-            return R.ok(result);
+            return result;
         }
-        // 5. 转换结果（Pet -> PetQueryVO）
         List<PetQueryVO> voList = records.stream()
                 .map(pet -> BeanUtil.copyProperties(pet, PetQueryVO.class))
                 .collect(Collectors.toList());
-        // 6. 用 Redis 实时点赞数覆盖（DB 的 likes_count 只在定时对账时更新）
         fillLikesCount(voList);
-        // 7. 封装分页结果
         result.setList(voList);
-        return R.ok(result);
+        return result;
     }
 
     @Override
@@ -212,6 +326,7 @@ public class PetServiceImpl extends ServiceImpl<PetMapper, Pet> implements IPetS
         pet.setPublisherId(UserContext.getUserId());
         //设置状态为待领养
         pet.setStatus(AdoptionStatus.AVAILABLE);
+        //点赞数不接收前端传值：插入时不写该列，由数据库默认值 0 提供，避免发布时伪造点赞量
         //保存到数据库
         save(pet);
     }
@@ -259,12 +374,16 @@ public class PetServiceImpl extends ServiceImpl<PetMapper, Pet> implements IPetS
             //用redis的set集合，记录点赞的用户id
             String likeKey = RedisConstants.KEY.LIKE_PET_KEY + id;
             String countKey = RedisConstants.KEY.LIKE_PET_COUNT_KEY;
-            List<String> list = Arrays.asList(likeKey, countKey, RedisConstants.KEY.LIKE_DIRTY_PETS_KEY);
+            //用户维度的点赞索引：供"我点赞的"直接读 Redis，不必等定时任务落库
+            String userLikeKey = RedisConstants.KEY.LIKE_USER_KEY + userId;
+            List<String> list = Arrays.asList(likeKey, countKey,
+                    RedisConstants.KEY.LIKE_DIRTY_PETS_KEY, userLikeKey);
             Long result = stringRedisTemplate.execute(
                     likePetScript,
                     list,
                     userId.toString(),
-                    id.toString()
+                    id.toString(),
+                    String.valueOf(System.currentTimeMillis())
             );
         } catch (Exception e) {
             try {
