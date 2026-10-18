@@ -49,6 +49,9 @@ public class Notification implements Serializable {
     @Schema(description = "接收者ID（通知发给谁）")
     private Long receiverId;
 
+    @Schema(description = "幂等键：receiverId:applicationId:type，唯一索引保证同一消息只落一条")
+    private String idemKey;
+
     @Schema(description="标题（即申请人的申请内容）")
     private String title;
 

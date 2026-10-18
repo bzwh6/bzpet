@@ -3,14 +3,20 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { addPet } from '../api/pet'
+import { useBreeds } from '../utils/breed'
 
 const router = useRouter()
-const form = ref({ petName: '', breed: '', age: null, gender: 0, description: '', imageUrl: '' })
+const { options: breedOptions } = useBreeds()
+const form = ref({ petName: '', breed: null, age: null, gender: 0, description: '', imageUrl: '' })
 const loading = ref(false)
 
 async function submit() {
   if (!form.value.petName) {
     ElMessage.warning('请填写宠物昵称')
+    return
+  }
+  if (!form.value.breed) {
+    ElMessage.warning('请选择品种')
     return
   }
   loading.value = true
@@ -32,7 +38,9 @@ async function submit() {
         <el-input v-model="form.petName" />
       </el-form-item>
       <el-form-item label="品种">
-        <el-input v-model="form.breed" />
+        <el-select v-model="form.breed" placeholder="请选择品种" filterable style="width: 100%">
+          <el-option v-for="b in breedOptions" :key="b.code" :label="b.name" :value="b.code" />
+        </el-select>
       </el-form-item>
       <el-form-item label="年龄">
         <el-input-number v-model="form.age" :min="0" />

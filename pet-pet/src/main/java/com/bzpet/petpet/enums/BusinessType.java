@@ -7,7 +7,8 @@ import lombok.Getter;
 
 @Getter
 public enum BusinessType {
-    ADOPTION_APPROVE(0,"领养审批");
+    ADOPTION_APPROVE(0,"领养审批"),
+    ADOPTION_APPLY(1,"领养申请");
     @EnumValue
     private final int value;
     private final String desc;

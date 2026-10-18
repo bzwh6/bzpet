@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 import java.io.Serializable;
 
 import com.bzpet.petpet.enums.AdoptionStatus;
+import com.bzpet.petpet.enums.PetBreed;
 import com.bzpet.petpet.enums.PetGender;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -39,7 +40,7 @@ public class Pet implements Serializable {
     private String petName;
 
     @Schema(description="品种")
-    private String breed;
+    private PetBreed breed;
 
     @Schema(description="年龄")
     private Integer age;

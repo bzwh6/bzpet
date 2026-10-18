@@ -2,6 +2,7 @@ package com.bzpet.petpet.domain.dto;
 
 
 import com.bzpet.petpet.enums.AdoptionStatus;
+import com.bzpet.petpet.enums.PetBreed;
 import com.bzpet.petpet.enums.PetGender;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
@@ -13,7 +14,7 @@ public class PetDTO {
     private String petName;
 
     @Schema(description="品种")
-    private String breed;
+    private PetBreed breed;
 
     @Schema(description="年龄")
     private Integer age;

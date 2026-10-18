@@ -24,10 +24,12 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 public class LoginFilter implements GlobalFilter, Ordered {
     private final StringRedisTemplate stringRedisTemplate;
-    // 白名单路径（不需要登录）
+    // 白名单路径（不需要登录）：登录、注册，以及首页用到的只读接口（列表 + 品种字典）
     private static final List<String> WHITE_LIST = List.of(
             "/user/login",
-            "/user/register"
+            "/user/register",
+            "/pets/list",
+            "/pets/breeds"
     );
 
     @Override

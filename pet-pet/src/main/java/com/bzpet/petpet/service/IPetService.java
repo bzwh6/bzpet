@@ -6,6 +6,7 @@ import com.bzpet.petpet.domain.dto.PetDTO;
 import com.bzpet.petpet.domain.po.Pet;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.bzpet.petpet.domain.query.PetQueryDTO;
+import com.bzpet.petpet.domain.vo.BreedVO;
 import com.bzpet.petpet.domain.vo.PetQueryVO;
 
 import java.util.List;
@@ -23,6 +24,11 @@ public interface IPetService extends IService<Pet> {
     R<PageDTO<PetQueryVO>> petList(PetQueryDTO petDTO);
 
     R<PetQueryVO> petDetail(Long id) throws InterruptedException;
+
+    /**
+     * 宠物品种字典（前端下拉与展示映射用）
+     */
+    R<List<BreedVO>> breedList();
 
     void addPet(PetDTO petDTO);
 

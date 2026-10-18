@@ -1,7 +1,10 @@
 import request from './request'
 
-// 分页查询宠物列表：{ pageNo, pageSize, age, gender, adoptionStatus }
+// 分页查询宠物列表：{ pageNo, pageSize, age, gender, adoptionStatus, breed }
 export const getPetList = (params) => request.get('/pets/list', { params })
+
+// 品种字典（下拉选项与展示映射用）：[{ code, name }]
+export const getBreeds = () => request.get('/pets/breeds')
 
 // 宠物详情
 export const getPetDetail = (id) => request.get(`/pets/detail/${id}`)

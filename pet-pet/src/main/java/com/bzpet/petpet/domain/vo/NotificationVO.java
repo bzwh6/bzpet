@@ -11,6 +11,8 @@ import java.time.LocalDateTime;
 public class NotificationVO {
     @Schema(description="业务Id")
     private Long applicationId;
+    @Schema(description="幂等键：接收者:业务id:类型")
+    private String idemKey;
     @Schema(description="通知类型")
     private NotificationType type;
     @Schema(description="标题")

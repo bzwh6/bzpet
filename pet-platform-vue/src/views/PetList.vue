@@ -1,13 +1,19 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { getPetList } from '../api/pet'
+import { useUserStore } from '../store/user'
+import { useBreeds, breedName } from '../utils/breed'
 
 const router = useRouter()
+const userStore = useUserStore()
+// 首页对游客开放，只展示列表；详情与其它操作需要登录
+const isGuest = computed(() => !userStore.token)
+const { options: breedOptions } = useBreeds()
 const loading = ref(false)
 const list = ref([])
 const total = ref(0)
-const query = ref({ pageNo: 1, pageSize: 8, adoptionStatus: null, gender: null })
+const query = ref({ pageNo: 1, pageSize: 8, adoptionStatus: null, gender: null, breed: null })
 
 async function load() {
   loading.value = true
@@ -26,7 +32,7 @@ function search() {
 }
 
 function reset() {
-  query.value = { pageNo: 1, pageSize: 8, adoptionStatus: null, gender: null }
+  query.value = { pageNo: 1, pageSize: 8, adoptionStatus: null, gender: null, breed: null }
   load()
 }
 
@@ -39,6 +45,15 @@ onMounted(load)
 
 <template>
   <div>
+    <el-alert
+      v-if="isGuest"
+      type="info"
+      :closable="false"
+      show-icon
+      title="当前为游客浏览"
+      description="登录后可查看宠物详情、提交领养申请、发布宠物"
+      style="margin-bottom: 12px"
+    />
     <el-card>
       <el-form :inline="true">
         <el-form-item label="状态">
@@ -46,6 +61,11 @@ onMounted(load)
             <el-option label="待领养" :value="0" />
             <el-option label="已领养" :value="1" />
             <el-option label="下架" :value="2" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="品种">
+          <el-select v-model="query.breed" placeholder="全部" clearable filterable style="width: 150px">
+            <el-option v-for="b in breedOptions" :key="b.code" :label="b.name" :value="b.code" />
           </el-select>
         </el-form-item>
         <el-form-item label="性别">
@@ -75,7 +95,7 @@ onMounted(load)
           </template>
         </el-image>
         <div class="name">{{ pet.petName }}</div>
-        <div class="meta">{{ pet.breed || '未知品种' }} · {{ pet.age ?? '-' }}岁 · {{ genderText(pet.gender) }}</div>
+        <div class="meta">{{ breedName(pet.breed) || '未知品种' }} · {{ pet.age ?? '-' }}岁 · {{ genderText(pet.gender) }}</div>
         <div class="meta">❤️ {{ pet.likesCount ?? 0 }}</div>
       </el-card>
     </div>

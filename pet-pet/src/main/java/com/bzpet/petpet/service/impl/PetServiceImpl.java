@@ -15,8 +15,10 @@ import com.bzpet.petpet.domain.dto.PetDTO;
 import com.bzpet.petpet.domain.po.Pet;
 import com.bzpet.petpet.domain.po.UserLike;
 import com.bzpet.petpet.domain.query.PetQueryDTO;
+import com.bzpet.petpet.domain.vo.BreedVO;
 import com.bzpet.petpet.domain.vo.PetQueryVO;
 import com.bzpet.petpet.enums.AdoptionStatus;
+import com.bzpet.petpet.enums.PetBreed;
 import com.bzpet.petpet.mapper.PetMapper;
 import com.bzpet.petpet.service.IPetService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -72,12 +74,13 @@ public class PetServiceImpl extends ServiceImpl<PetMapper, Pet> implements IPetS
         Integer age = petDTO.getAge();
         Integer gender = petDTO.getGender();
         Integer adoptionStatus = petDTO.getAdoptionStatus();
-        //TODO 品种
+        PetBreed breed = petDTO.getBreed();
         //分页查询宠物列表
         Page<Pet> page = lambdaQuery()
                 .eq(age != null, Pet::getAge, age)
                 .eq(gender != null, Pet::getGender, gender)
                 .eq(adoptionStatus != null, Pet::getStatus, adoptionStatus)
+                .eq(breed != null, Pet::getBreed, breed)
                 .orderByDesc(Pet::getCreateTime)
                 .page(new Page<>(pageNo, pageSize));
         List<Pet> records = page.getRecords();
@@ -152,6 +155,15 @@ public class PetServiceImpl extends ServiceImpl<PetMapper, Pet> implements IPetS
                 lock.unlock();
             }
         }
+    }
+
+    @Override
+    public R<List<BreedVO>> breedList() {
+        //字典来自枚举本身，顺序即枚举声明顺序（猫→狗→兔→其他）
+        List<BreedVO> list = Arrays.stream(PetBreed.values())
+                .map(b -> new BreedVO(b.getValue(), b.getDesc()))
+                .collect(Collectors.toList());
+        return R.ok(list);
     }
 
     /** 单条：用 Redis 中的实时点赞数覆盖 VO */
@@ -287,69 +299,83 @@ public class PetServiceImpl extends ServiceImpl<PetMapper, Pet> implements IPetS
 
         //先删脏标记（认领）再处理：处理期间若有人点赞/取消，Lua 会重新标记该宠物，
         //下一轮任务会带着最新快照再同步一次，避免并发变更的标记被误删导致永久漏同步
-        stringRedisTemplate.opsForSet().remove(RedisConstants.KEY.LIKE_DIRTY_PETS_KEY,
-                dirtyPets.toArray(new String[0]));
+        String[] claimed = dirtyPets.toArray(new String[0]);
+        stringRedisTemplate.opsForSet().remove(RedisConstants.KEY.LIKE_DIRTY_PETS_KEY, claimed);
 
-        //1. 从 Redis 取每个宠物的点赞用户集合（key 不存在视为空集，即被取消到 0 赞）
-        Map<Long, Set<Long>> redisLikeMap = new HashMap<>(petIds.size());
-        for (Long petId : petIds) {
-            Set<String> users = stringRedisTemplate.opsForSet()
-                    .members(RedisConstants.KEY.LIKE_PET_KEY + petId);
-            redisLikeMap.put(petId, users == null ? Collections.<Long>emptySet()
-                    : users.stream().map(Long::valueOf).collect(Collectors.toSet()));
-        }
-
-        //2. 批量查出这些宠物在 DB 的点赞记录（IN 分批，避免单条 SQL 过长）
-        List<UserLike> dbLikes = new ArrayList<>();
-        for (List<Long> batch : CollUtil.split(petIds, 500)) {
-            dbLikes.addAll(userLikeService.lambdaQuery()
-                    .in(UserLike::getPetId, batch)
-                    .list());
-        }
-        Map<Long, List<UserLike>> dbLikesByPet = dbLikes.stream()
-                .collect(Collectors.groupingBy(UserLike::getPetId));
-
-        //3. 在内存中算出差异，收集成批量操作
-        List<UserLike> toInsert = new ArrayList<>();
-        List<Long> toDeleteIds = new ArrayList<>();
-        List<Pet> toUpdateCount = new ArrayList<>(petIds.size());
-        for (Long petId : petIds) {
-            Set<Long> redisUsers = redisLikeMap.get(petId);
-            List<UserLike> petDbLikes = dbLikesByPet.getOrDefault(petId, Collections.<UserLike>emptyList());
-            Set<Long> dbUsers = petDbLikes.stream().map(UserLike::getUserId).collect(Collectors.toSet());
-
-            //Redis 有、DB 无 → 新增（新点赞）
-            for (Long userId : redisUsers) {
-                if (!dbUsers.contains(userId)) {
-                    toInsert.add(new UserLike()
-                            .setUserId(userId)
-                            .setPetId(petId)
-                            .setCreateTime(LocalDateTime.now()));
-                }
+        try {
+            //1. 从 Redis 取每个宠物的点赞用户集合（key 不存在视为空集，即被取消到 0 赞）
+            Map<Long, Set<Long>> redisLikeMap = new HashMap<>(petIds.size());
+            for (Long petId : petIds) {
+                Set<String> users = stringRedisTemplate.opsForSet()
+                        .members(RedisConstants.KEY.LIKE_PET_KEY + petId);
+                redisLikeMap.put(petId, users == null ? Collections.<Long>emptySet()
+                        : users.stream().map(Long::valueOf).collect(Collectors.toSet()));
             }
-            //DB 有、Redis 无 → 删除（取消点赞）
-            for (UserLike dbLike : petDbLikes) {
-                if (!redisUsers.contains(dbLike.getUserId())) {
-                    toDeleteIds.add(dbLike.getId());
-                }
+
+            //2. 批量查出这些宠物在 DB 的点赞记录（IN 分批，避免单条 SQL 过长）
+            List<UserLike> dbLikes = new ArrayList<>();
+            for (List<Long> batch : CollUtil.split(petIds, 500)) {
+                dbLikes.addAll(userLikeService.lambdaQuery()
+                        .in(UserLike::getPetId, batch)
+                        .list());
             }
-            //点赞总数以 Redis 集合大小为准覆盖
-            toUpdateCount.add(new Pet().setId(petId).setLikesCount(redisUsers.size()));
-        }
+            Map<Long, List<UserLike>> dbLikesByPet = dbLikes.stream()
+                    .collect(Collectors.groupingBy(UserLike::getPetId));
 
-        //4. 批量落库
-        if (CollUtil.isNotEmpty(toInsert)) {
-            userLikeService.saveBatch(toInsert);
-        }
-        if (CollUtil.isNotEmpty(toDeleteIds)) {
-            userLikeService.removeByIds(toDeleteIds);
-        }
-        if (CollUtil.isNotEmpty(toUpdateCount)) {
-            updateBatchById(toUpdateCount);
-        }
+            //3. 在内存中算出差异，收集成批量操作
+            List<UserLike> toInsert = new ArrayList<>();
+            List<Long> toDeleteIds = new ArrayList<>();
+            List<Pet> toUpdateCount = new ArrayList<>(petIds.size());
+            for (Long petId : petIds) {
+                Set<Long> redisUsers = redisLikeMap.get(petId);
+                List<UserLike> petDbLikes = dbLikesByPet.getOrDefault(petId, Collections.<UserLike>emptyList());
+                Set<Long> dbUsers = petDbLikes.stream().map(UserLike::getUserId).collect(Collectors.toSet());
 
-        //5. 落库完成（脏标记已在处理前认领删除，此处不再删除）
-        log.info("点赞数据同步完成，新增{}条，删除{}条", toInsert.size(), toDeleteIds.size());
+                //Redis 有、DB 无 → 新增（新点赞）
+                for (Long userId : redisUsers) {
+                    if (!dbUsers.contains(userId)) {
+                        toInsert.add(new UserLike()
+                                .setUserId(userId)
+                                .setPetId(petId)
+                                .setCreateTime(LocalDateTime.now()));
+                    }
+                }
+                //DB 有、Redis 无 → 删除（取消点赞）
+                for (UserLike dbLike : petDbLikes) {
+                    if (!redisUsers.contains(dbLike.getUserId())) {
+                        toDeleteIds.add(dbLike.getId());
+                    }
+                }
+                //点赞总数以 Redis 集合大小为准覆盖
+                toUpdateCount.add(new Pet().setId(petId).setLikesCount(redisUsers.size()));
+            }
+
+            //4. 批量落库
+            if (CollUtil.isNotEmpty(toInsert)) {
+                userLikeService.saveBatch(toInsert);
+            }
+            if (CollUtil.isNotEmpty(toDeleteIds)) {
+                userLikeService.removeByIds(toDeleteIds);
+            }
+            if (CollUtil.isNotEmpty(toUpdateCount)) {
+                updateBatchById(toUpdateCount);
+            }
+
+            //5. 落库完成（脏标记已在处理前认领删除，此处不再删除）
+            log.info("点赞数据同步完成，新增{}条，删除{}条", toInsert.size(), toDeleteIds.size());
+        } catch (Exception e) {
+            //补偿：把本轮认领的脏标记还回去，避免这批变更要等到下次有人点赞才重新进队列。
+            //本方法以 Redis 快照为准重算差异，重跑只会得到"无差异"，不会重复插入/删除，
+            //所以已写入的部分不需要回滚，只需归还标记。
+            try {
+                stringRedisTemplate.opsForSet().add(RedisConstants.KEY.LIKE_DIRTY_PETS_KEY, claimed);
+                log.warn("点赞数据同步失败，已归还本轮脏标记，下一轮重试：{}", dirtyPets, e);
+            } catch (Exception restoreEx) {
+                //归还动作本身失败（多半是 Redis 不可用），只记录丢失范围，不覆盖原始异常
+                log.error("归还点赞脏标记失败，这批宠物可能漏同步：{}", dirtyPets, restoreEx);
+            }
+            throw e;
+        }
     }
 
     public void likeFallback(Long id, BlockException e) {

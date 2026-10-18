@@ -26,6 +26,9 @@ public class NotificationQueryVO {
     @Schema(description = "对应业务Id（跳转目标）")
     private Long applicationId;
 
+    @Schema(description = "幂等键：接收者:业务id:类型")
+    private String idemKey;
+
     @Schema(description = "创建时间")
     private LocalDateTime createTime;
 

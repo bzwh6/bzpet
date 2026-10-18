@@ -39,7 +39,7 @@ pet-gateway（getway-service，:8083）── 登录鉴权 GlobalFilter
 - **鉴权链路**：登录签发 JWT 并写入 Redis（3 小时）；网关校验 JWT 与 Redis 双重有效并滑动续期，非白名单路径（`/user/login`、`/user/register`）均需登录；各服务通过 `UserInterceptor` 把 `userId` 放入 `UserContext`（ThreadLocal）。
 - **宠物详情缓存**：空值缓存防穿透、Redisson 分布式锁防击穿、随机过期时间防雪崩。
 - **点赞**：Lua 脚本原子操作 Redis（Set 存点赞关系 + ZSet 存计数 + dirty 集合标记待同步），实时计数走 Redis；xxl-job `syncUserLikeJob` 定时对账，把点赞/取消落库到 `user_like` 表与 `pet.likes_count`。
-- **领养审批通知**：本地消息表 `message_compensation`（事务内落表，`afterCommit` 后发 MQ）+ publisher confirm/return 回调联动置"待重试" + xxl-job 定时重发与清理 + 消费端死信队列兜底；审批通过用乐观锁防并发超领，并自动拒绝同宠物的其它申请；消费端手动 ack + Redis 幂等。
+- **领养审批通知**：本地消息表 `message_compensation`（事务内落表，`afterCommit` 后发 MQ）+ publisher confirm/return 回调联动置"待重试" + xxl-job 定时重发与清理 + 消费端死信队列兜底；审批通过用乐观锁防并发超领，并自动拒绝同宠物的其它申请；消费端手动 ack + 通知表唯一索引幂等（`notification.idem_key`，不再依赖 Redis）。
 - **头像上传**：`POST /user/avatar/upload` 接收 `MultipartFile`，`OssService` 以 UUID 命名上传阿里云 OSS 并返回可访问 URL，URL 再由 `PUT /user/update/info` 的 `avatar` 字段入库（上传接口只存文件、update 接口存 URL）。AK/SK、bucket、域名等经 Nacos 的 `aliyun.oss.*` 注入。
 - **请求链路追踪**：网关 `RequestIdGlobalFilter` 统一生成/透传 `requestId`；各服务 `RequestIdFilter` 把它写入 MDC（日志 pattern 用 `%X{requestId}` 自动带出），并回写响应头与 `R.requestId`；Feign 由 `RequestInterceptor` 透传，保证 `pet-pet → pet-user` 的链路不断。请求结束在 `finally` 清理 MDC，避免线程复用串号。
 

@@ -6,6 +6,7 @@ import com.bzpet.common.domain.R;
 import com.bzpet.common.domain.dto.PageDTO;
 import com.bzpet.petpet.domain.dto.PetDTO;
 import com.bzpet.petpet.domain.query.PetQueryDTO;
+import com.bzpet.petpet.domain.vo.BreedVO;
 import com.bzpet.petpet.domain.vo.PetQueryVO;
 import com.bzpet.petpet.service.IPetService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -38,6 +39,12 @@ public class PetController {
     public R<PageDTO<PetQueryVO>> petList(@ParameterObject PetQueryDTO petDTO) {
         return petService.petList(petDTO);
     }
+    @Operation(summary="宠物品种字典")
+    @GetMapping("/breeds")
+    public R<List<BreedVO>> breedList() {
+        return petService.breedList();
+    }
+
     @Operation(summary="查询宠物详情")
     @GetMapping("/detail/{id}")
     public R<PetQueryVO> petDetail(@PathVariable Long id) throws InterruptedException {

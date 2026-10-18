@@ -5,10 +5,12 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { getPetDetail, likePet, deletePet, isLiked } from '../api/pet'
 import { applyAdoption } from '../api/adoption'
 import { useUserStore } from '../store/user'
+import { useBreeds, breedName } from '../utils/breed'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
+useBreeds()
 const pet = ref(null)
 const liked = ref(false)
 const loading = ref(false)
@@ -74,7 +76,7 @@ onMounted(load)
       </el-image>
       <div class="info">
         <h2>{{ pet.petName }}</h2>
-        <p>品种：{{ pet.breed || '-' }}</p>
+        <p>品种：{{ breedName(pet.breed) || '-' }}</p>
         <p>年龄：{{ pet.age ?? '-' }} 岁</p>
         <p>性别：{{ genderText(pet.gender) }}</p>
         <p>状态：{{ statusText(pet.status) }}</p>

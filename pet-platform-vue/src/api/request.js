@@ -2,6 +2,24 @@ import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import router from '../router'
 
+// 401 统一处理：区分"未登录"和"登录已过期"，并避免并发请求重复弹窗
+let last401At = 0
+function handleUnauthorized() {
+  const now = Date.now()
+  if (now - last401At < 1500) {
+    return
+  }
+  last401At = now
+  const hadToken = !!localStorage.getItem('token')
+  localStorage.removeItem('token')
+  localStorage.removeItem('userId')
+  ElMessage.error(hadToken ? '登录已过期，请重新登录' : '请先登录')
+  const current = router.currentRoute.value
+  if (current.path !== '/login') {
+    router.push({ path: '/login', query: { redirect: current.fullPath } })
+  }
+}
+
 // 统一走 /api 前缀，由 vite proxy 转发到网关
 const request = axios.create({
   baseURL: '/api',
@@ -35,10 +53,7 @@ request.interceptors.response.use(
   (error) => {
     const status = error.response && error.response.status
     if (status === 401) {
-      localStorage.removeItem('token')
-      localStorage.removeItem('userId')
-      ElMessage.error('登录已过期，请重新登录')
-      router.push('/login')
+      handleUnauthorized()
     } else {
       ElMessage.error((error.response && error.response.data && error.response.data.msg) || error.message || '网络错误')
     }

@@ -31,7 +31,6 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.bzpet.petpet.service.IPetService;
 import com.bzpet.petpet.service.IMessageCompensationService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,12 +53,12 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class AdoptionApplicationServiceImpl extends ServiceImpl<AdoptionApplicationMapper, AdoptionApplication> implements IAdoptionApplicationService {
     private final IPetService petService;
-    private final RabbitTemplate rabbitTemplate;
     private final IMessageCompensationService messageCompensationService;
     private final UserClient userClient;
     private final StringRedisTemplate stringRedisTemplate;
 
     @Override
+    @Transactional
     public R<String> applyAdoption(AdoptionApplyDTO applyDTO) {
         //获取当前用户ID,申请人
         Long userId = UserContext.getUserId();
@@ -89,7 +88,9 @@ public class AdoptionApplicationServiceImpl extends ServiceImpl<AdoptionApplicat
         } catch (Exception e) {
             throw new BadException("不可重复提交申请！");
         }
-        //向发布人发送通知
+        //向发布人发送通知：与审批链路保持一致，申请落库和"待发送"消息放在同一事务，
+        //提交后再真正发 MQ。发送失败由 confirm/return 回调置"待重试"、xxl-job 定时重发兜底，
+        //避免出现"申请已入库但发布人永远收不到通知"
         NotificationDTO notificationDTO = new NotificationDTO();
         notificationDTO.setPublisherId(pet.getPublisherId());
         notificationDTO.setApplicantId(userId);
@@ -99,11 +100,23 @@ public class AdoptionApplicationServiceImpl extends ServiceImpl<AdoptionApplicat
         notificationDTO.setTitle(applyDTO.getReason());
         notificationDTO.setContent("您有新的领养申请");
         notificationDTO.setType(NotificationType.NOTIFICATION_TYPE_ADOPTION);
-        rabbitTemplate.convertAndSend(
-                MqConstants.Exchange.PET_ADPTION_EXCHANGE,
-                MqConstants.Key.PET_ADPTION_ROUTING_KEY,
-                notificationDTO
-        );
+
+        MessageCompensation compensation = new MessageCompensation();
+        compensation.setBusinessType(BusinessType.ADOPTION_APPLY.getDesc());
+        compensation.setApplicationId(adoptionApplication.getId());
+        compensation.setReceiverIds(String.valueOf(pet.getPublisherId()));
+        compensation.setExchangeName(MqConstants.Exchange.PET_ADPTION_EXCHANGE);
+        compensation.setRoutingKey(MqConstants.Key.PET_ADPTION_ROUTING_KEY);
+        compensation.setMessageId(adoptionApplication.getId() + "_apply_" + System.currentTimeMillis());
+        compensation.setMessageContent(JSONUtil.toJsonStr(notificationDTO));
+        Long compensationId = messageCompensationService.savePendingMessage(compensation);
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                messageCompensationService.sendAndUpdateStatus(compensationId);
+            }
+        });
         return R.ok("领养申请成功");
     }
 
@@ -214,18 +227,21 @@ public class AdoptionApplicationServiceImpl extends ServiceImpl<AdoptionApplicat
             throw new BadException("领养申请状态错误");
         }
         boolean isAccept = processDTO.getStatus() == ApplicationStatus.APPROVED;
-        //先更新宠物状态，更新宠物状态的时候加乐观锁判断是否成功更新
-        boolean update = petService.lambdaUpdate()
-                .eq(Pet::getStatus, AdoptionStatus.AVAILABLE)
-                .eq(Pet::getId, petId)
-                .set(isAccept ,Pet::getStatus, AdoptionStatus.ADOPTED)
-                .update();
-        if (!update) throw new BadException("宠物状态更新失败");
-        //更新领养申请状态
+        //只有通过时才需要抢宠物状态（CAS 防并发超领）；拒绝不改变宠物状态。
+        //注意：不能把 set 写成 set(isAccept, ...)，否则拒绝时 wrapper 里没有任何 set 子句，
+        //MyBatis-Plus 会生成 "UPDATE pet WHERE ..." 这种缺 SET 的 SQL，导致 SQL 语法错误。
+        if (isAccept) {
+            boolean update = petService.lambdaUpdate()
+                    .eq(Pet::getStatus, AdoptionStatus.AVAILABLE)
+                    .eq(Pet::getId, petId)
+                    .set(Pet::getStatus, AdoptionStatus.ADOPTED)
+                    .update();
+            if (!update) throw new BadException("宠物状态更新失败");
+        }
+        //更新领养申请状态（reason 存的是申请人的领养理由，审核时不能覆盖）
         application.setStatus(isAccept ?
                 ApplicationStatus.APPROVED : ApplicationStatus.REJECTED);
         application.setAuditTime(LocalDateTime.now());
-        application.setReason(isAccept ? null : processDTO.getRejectReason());
         updateById(application);
         //创建消息内容
         ProcessDTO dto = new ProcessDTO();
@@ -266,10 +282,12 @@ public class AdoptionApplicationServiceImpl extends ServiceImpl<AdoptionApplicat
 
     private void handleAccept(ProcessDTO dto, Long compensationId) {
         messageCompensationService.sendAndUpdateStatus(compensationId);
+        //只自动拒绝仍在审核中的申请：已通过/已拒绝的历史申请不能再发一次"被他人领养"的通知
         List<AdoptionApplication> otherApps = lambdaQuery()
                 .eq(AdoptionApplication::getPetId, dto.getPetId())
                 .eq(AdoptionApplication::getPublisherId, dto.getPublisherId())
                 .ne(AdoptionApplication::getApplicantId, dto.getApplicantId().get(0))
+                .eq(AdoptionApplication::getStatus, ApplicationStatus.PENDING)
                 .list();
         if (CollUtil.isEmpty(otherApps)) {
             return;

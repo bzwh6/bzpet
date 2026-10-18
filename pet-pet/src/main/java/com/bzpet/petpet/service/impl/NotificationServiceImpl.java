@@ -3,7 +3,6 @@ package com.bzpet.petpet.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.bzpet.common.constants.RedisConstants;
 import com.bzpet.common.domain.R;
 import com.bzpet.common.domain.dto.PageDTO;
 import com.bzpet.common.enums.NotificationType;
@@ -24,13 +23,11 @@ import com.bzpet.petpet.service.INotificationService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -46,127 +43,95 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Notification> implements INotificationService {
     private final IAdoptionApplicationService applicationService;
-    private final StringRedisTemplate stringRedisTemplate;
 
     @Override
     public void addNotification(NotificationDTO dto) {
-        // 幂等：同一 接收者+业务id+类型 只处理一次，防止 MQ 重试/重复投递造成重复通知
-        String idemKey = dto.getReceiverId() + ":" + dto.getApplicationId() + ":" + dto.getType();
-        Boolean first = stringRedisTemplate.opsForValue().setIfAbsent(
-                RedisConstants.KEY.MESSAGE_DONE_ID + idemKey,
-                "1",
-                RedisConstants.EXPIRE.NOTIFICATION_IDEM_EXPIRE,
-                TimeUnit.SECONDS);
-        if (!Boolean.TRUE.equals(first)) {
-            log.info("通知已处理过，跳过：{}", idemKey);
-            return;
-        }
+        //幂等：幂等键与通知落在同一行，靠唯一索引让"占位 + 落库"成为一次原子写。
+        //MQ 重复投递时 INSERT 会撞唯一键，捕获后视为已处理，不再依赖 Redis。
+        Notification notification = BeanUtil.copyProperties(dto, Notification.class);
+        notification.setIdemKey(idemKeyOf(dto.getReceiverId(), dto.getApplicationId(), dto.getType()));
         try {
-            //把数据保存到数据库
-            Notification notification = BeanUtil.copyProperties(dto, Notification.class);
             save(notification);
-        } catch (Exception e) {
-            //清理缓存标记
-            stringRedisTemplate.delete(RedisConstants.KEY.MESSAGE_DONE_ID + idemKey);
-            throw new RuntimeException(e);
+        } catch (DuplicateKeyException e) {
+            log.info("通知已处理过，跳过：{}", notification.getIdemKey());
         }
+    }
+
+    /** 幂等键：接收者 + 业务id + 类型，与 notification.idem_key 唯一索引配合使用 */
+    private String idemKeyOf(Long receiverId, Long applicationId, Object type) {
+        return receiverId + ":" + applicationId + ":" + type;
     }
 
     @Override
     @Transactional
     public void rejectAdoptionApplication(ProcessDTO dto) {
-        // 幂等：同一 发布人+业务id 只处理一次，防止 MQ 重试/重复投递造成重复通知
-        String idemKey = dto.getPublisherId() + ":" + dto.getApplicationId();
-        Boolean first = stringRedisTemplate.opsForValue().setIfAbsent(
-                RedisConstants.KEY.MESSAGE_DONE_ID + idemKey,
-                "1",
-                RedisConstants.EXPIRE.NOTIFICATION_IDEM_EXPIRE,
-                TimeUnit.SECONDS);
-        if (!Boolean.TRUE.equals(first)) {
-            log.info("通知已处理过，跳过：{}", idemKey);
-            return;
-        }
-        try {
-            //判断申请人id是否只有一个
-            if (!dto.getIsAccept()) {
-                //说明发布者明确拒绝了一个申请
-                //向申请人发送通知，通知被拒绝
+        //重复投递由通知表的幂等键（唯一索引）拦截；申请状态是条件更新，天然幂等
+        if (!dto.getIsAccept()) {
+            //说明发布者明确拒绝了一个申请
+            //先把该申请落库为已拒绝（条件更新，重复消费/重试天然幂等）
+            if (dto.getApplicationId() != null) {
+                applicationService.lambdaUpdate()
+                        .eq(AdoptionApplication::getId, dto.getApplicationId())
+                        .eq(AdoptionApplication::getStatus, ApplicationStatus.PENDING)
+                        .set(AdoptionApplication::getStatus, ApplicationStatus.REJECTED)
+                        .update();
+            }
+            //向申请人发送通知，通知被拒绝
+            Long applicantId = dto.getApplicantId().get(0);
+            NotificationDTO notificationDTO = new NotificationDTO();
+            notificationDTO.setType(NotificationType.NOTIFICATION_TYPE_SYSTEM);
+            notificationDTO.setIsRead(ReadStatus.UNREAD);
+            notificationDTO.setPetId(dto.getPetId());
+            notificationDTO.setApplicantId(applicantId);
+            notificationDTO.setReceiverId(applicantId);
+            notificationDTO.setApplicationId(dto.getApplicationId());
+            notificationDTO.setPublisherId(dto.getPublisherId());
+            notificationDTO.setTitle(dto.getRejectReason());
+            notificationDTO.setContent("很遗憾，您的领养申请已被拒绝！");
+            addNotification(notificationDTO);
+        } else {
+            //说明发布者同意了一个申请，其他的申请被拒绝.
+            //修改领养申请状态为已拒绝
+            applicationService.lambdaUpdate()
+                    .in(AdoptionApplication::getApplicantId, dto.getApplicantId())
+                    .eq(AdoptionApplication::getPublisherId, dto.getPublisherId())
+                    .eq(AdoptionApplication::getPetId, dto.getPetId())
+                    .eq(AdoptionApplication::getStatus, ApplicationStatus.PENDING)
+                    .set(AdoptionApplication::getStatus, ApplicationStatus.REJECTED)
+                    .update();
+            //向其他申请人发送通知，通知被拒绝
+            //逐条写入而不是 saveBatch：单条撞唯一键只会跳过它自己，不会让整批都插不进去
+            for (Long applicantId : dto.getApplicantId()) {
                 NotificationDTO notificationDTO = new NotificationDTO();
                 notificationDTO.setType(NotificationType.NOTIFICATION_TYPE_SYSTEM);
                 notificationDTO.setIsRead(ReadStatus.UNREAD);
                 notificationDTO.setPetId(dto.getPetId());
-                notificationDTO.setApplicantId(dto.getApplicantId().get(0));
-                notificationDTO.setReceiverId(dto.getApplicantId().get(0));
+                notificationDTO.setApplicantId(applicantId);
+                notificationDTO.setReceiverId(applicantId);
                 notificationDTO.setApplicationId(dto.getApplicationId());
                 notificationDTO.setPublisherId(dto.getPublisherId());
                 notificationDTO.setTitle(dto.getRejectReason());
                 notificationDTO.setContent("很遗憾，您的领养申请已被拒绝！");
                 addNotification(notificationDTO);
-            } else {
-                //说明发布者同意了一个申请，其他的申请被拒绝.
-                //修改领养申请状态为已拒绝
-                applicationService.lambdaUpdate()
-                        .in(AdoptionApplication::getApplicantId, dto.getApplicantId())
-                        .eq(AdoptionApplication::getPublisherId, dto.getPublisherId())
-                        .eq(AdoptionApplication::getPetId, dto.getPetId())
-                        .eq(AdoptionApplication::getStatus, ApplicationStatus.PENDING)
-                        .set(AdoptionApplication::getStatus, ApplicationStatus.REJECTED)
-                        .update();
-                //向其他申请人发送通知，通知被拒绝,批量插入
-                List<Notification> notificationList = new ArrayList<>();
-                for (Long applicantId : dto.getApplicantId()) {
-                    Notification notification = new Notification();
-                    notification.setType(NotificationType.NOTIFICATION_TYPE_SYSTEM);
-                    notification.setIsRead(ReadStatus.UNREAD);
-                    notification.setPetId(dto.getPetId());
-                    notification.setApplicantId(applicantId);
-                    notification.setReceiverId(applicantId);
-                    notification.setApplicationId(dto.getApplicationId());
-                    notification.setPublisherId(dto.getPublisherId());
-                    notification.setTitle(dto.getRejectReason());
-                    notification.setContent("很遗憾，您的领养申请已被拒绝！");
-                    notificationList.add(notification);
-                }
-                saveBatch(notificationList);
             }
-        } catch (Exception e) {
-            //清理缓存标记
-            stringRedisTemplate.delete(RedisConstants.KEY.MESSAGE_DONE_ID + idemKey);
-            throw new RuntimeException(e);
         }
     }
 
 
     @Override
     public void acceptAdoptionApplication(ProcessDTO dto) {
-        // 幂等：同一 发布人+业务id 只处理一次，防止 MQ 重试/重复投递造成重复通知
-        String idemKey = dto.getPublisherId() + ":" + dto.getApplicationId();
-        Boolean first = stringRedisTemplate.opsForValue().setIfAbsent(
-                RedisConstants.KEY.MESSAGE_DONE_ID + idemKey,
-                "1",
-                RedisConstants.EXPIRE.NOTIFICATION_IDEM_EXPIRE,
-                TimeUnit.SECONDS);
-        if (!Boolean.TRUE.equals(first)) {
-            log.info("通知已处理过，跳过：{}", idemKey);
-            return;
-        }
-        try {
-            //向领养申请人发送通知，通知领养成功
-            NotificationDTO notificationDTO = new NotificationDTO();
-            notificationDTO.setType(NotificationType.NOTIFICATION_TYPE_ADOPTED);
-            notificationDTO.setIsRead(ReadStatus.UNREAD);
-            notificationDTO.setPetId(dto.getPetId());
-            notificationDTO.setApplicantId(dto.getApplicantId().get(0));
-            notificationDTO.setReceiverId(dto.getApplicantId().get(0));
-            notificationDTO.setApplicationId(dto.getApplicationId());
-            notificationDTO.setPublisherId(dto.getPublisherId());
-            notificationDTO.setContent("恭喜您，您的领养申请已通过！");
-            addNotification(notificationDTO);
-        } catch (Exception e) {
-            //清理缓存标记
-            stringRedisTemplate.delete(RedisConstants.KEY.MESSAGE_DONE_ID + idemKey);
-            throw new RuntimeException(e);
-        }
+        //通知幂等由 addNotification 的唯一索引保证，不再需要额外的占位
+        Long applicantId = dto.getApplicantId().get(0);
+        NotificationDTO notificationDTO = new NotificationDTO();
+        notificationDTO.setType(NotificationType.NOTIFICATION_TYPE_ADOPTED);
+        notificationDTO.setIsRead(ReadStatus.UNREAD);
+        notificationDTO.setPetId(dto.getPetId());
+        notificationDTO.setApplicantId(applicantId);
+        notificationDTO.setReceiverId(applicantId);
+        notificationDTO.setApplicationId(dto.getApplicationId());
+        notificationDTO.setPublisherId(dto.getPublisherId());
+        notificationDTO.setContent("恭喜您，您的领养申请已通过！");
+        addNotification(notificationDTO);
     }
 
     @Override
@@ -209,6 +174,7 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
         //返回跳转信息
         NotificationVO vo = new NotificationVO();
         vo.setApplicationId(notification.getApplicationId());
+        vo.setIdemKey(notification.getIdemKey());
         vo.setType(notification.getType());
         vo.setTitle(notification.getTitle());
         vo.setContent(notification.getContent());

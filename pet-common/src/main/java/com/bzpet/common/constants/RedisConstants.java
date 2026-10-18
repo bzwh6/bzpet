@@ -6,8 +6,6 @@ public interface RedisConstants {
         String PET_DETAIL_KEY = "pet:detail:";
         // 用户token缓存key
         String USER_TOKEN_KEY = "user:token:";
-        // 消息的幂等id
-        String MESSAGE_DONE_ID = "message:done:id:";
         // 点赞宠物的缓存key,记录点赞的用户id
         String LIKE_PET_KEY = "like:pet:";
         // 点赞宠物的缓存key,记录点赞数
@@ -23,7 +21,5 @@ public interface RedisConstants {
         long NULL_EXPIRE = 10;
         // 用户token缓存过期时间3小时
         long USER_TOKEN_EXPIRE = 3 * 3600;
-        // 通知幂等缓存过期时间（7天，覆盖重试窗口）
-        long NOTIFICATION_IDEM_EXPIRE = 7 * 24 * 3600;
     }
 }
