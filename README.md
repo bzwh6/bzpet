@@ -51,7 +51,7 @@ pet-gateway（getway-service，:8083）── 登录鉴权 GlobalFilter
 
 1. **准备中间件**：Nacos、MySQL、Redis、RabbitMQ、xxl-job-admin（Sentinel dashboard 可选）。Nacos 地址在各模块 `bootstrap-dev.yml`（当前为 `192.168.150.101:8848`，按实际环境修改）。
 2. **Nacos 共享配置**：配置中心需存在 `shared-mysql.yaml`、`shared-redis.yaml`、`shared-mybatis.yaml`、`shared-rabbitmq.yaml`、`shared-xxljob.yaml`、`shared-sentinel.yaml`，各服务通过 `bootstrap.yml` 引用（数据库名取自各服务 `bz.db.database`）。`pet-user` 另需配置 `aliyun.oss.*`（`endpoint` / `access-key-id` / `access-key-secret` / `bucket-name` / `domain`，endpoint 与 domain 须和 bucket 地域一致）以及 `spring.servlet.multipart.max-file-size`（默认 1MB，上传图片需调大）。
-3. **建库建表**：按上节建 `pet_user`、`pet_pet` 两个库；仓库未提交 SQL 脚本，表结构可参照各 `domain/po` 实体创建。
+3. **建库建表**：执行 `sql/00_schema.sql` 创建 `pet_user`、`pet_pet` 两个库与全部表；若库中已有旧结构，按文件名顺序执行其余 migration。
 4. **启动后端**：依次运行 `PetUserApplication`、`PetPetApplication`、`PetGetwayApplication`（或 `mvn spring-boot:run`）。
 5. **启动前端**：
 

@@ -36,5 +36,4 @@ build/
 .zcodeignore
 _resume_task
 .workbuddy
-sql
 logs
